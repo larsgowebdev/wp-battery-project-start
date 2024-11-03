@@ -232,17 +232,13 @@ if [ -f vite.config.js ]; then
     fi
 fi
 
-print_step "Configuration complete!"
-echo -e "Your project has been configured successfully."
-echo -e "You can access your site at: https://$PROJECT_NAME.ddev.site"
-
 # Optional deployment configuration prompt
 read -p "Would you like to configure deployment settings? (y/N) " configure_deployment
 if [[ $configure_deployment =~ ^[Yy]$ ]]; then
     for config_file in ".gitlab/config/production.yml" ".gitlab/config/staging.yml"; do
         if [ -f "$config_file" ]; then
             echo -e "\nConfiguring $config_file"
-            read -p "Deploy key (base64): " DEPLOY_KEY
+            read -p "Gitlab Deploy key variable (base64): " DEPLOY_KEY
             read -p "Deploy user: " DEPLOY_USER
             read -p "Deploy server: " DEPLOY_SERVER
             read -p "Deploy path: " DEPLOY_PATH
@@ -260,26 +256,10 @@ if [[ $configure_deployment =~ ^[Yy]$ ]]; then
     done
 fi
 
-# Optional DDEV initialization
-if command -v ddev &> /dev/null; then
-    read -p "Would you like to initialize DDEV and build the project now? (y/N) " init_ddev
-    if [[ $init_ddev =~ ^[Yy]$ ]]; then
-        print_step "Initializing DDEV and building project..."
-        ddev start
-        ddev composer install
-        ddev exec 'npm install && npm run build'
-        print_success "\nProject build complete! 🎉"
-    else
-        echo -e "\nTo initialize your project later, run these commands:"
-        echo "ddev start"
-        echo "ddev composer install"
-        echo "ddev exec 'npm install && npm run build'"
-    fi
-else
-    print_warning "DDEV is not installed. To initialize your project, install DDEV and run:"
-    echo "ddev start"
-    echo "ddev composer install"
-    echo "ddev exec 'npm install && npm run build'"
-fi
-
+print_step "Configuration complete!"
+echo -e "\nTo initialize your project with ddev, run these commands:"
+echo "ddev start"
+echo "ddev composer install"
+echo "ddev exec 'npm install && npm run build'"
+echo -e "After ddev setup, you can access your site at: https://$PROJECT_NAME.ddev.site"
 print_success "\nSetup complete! 🎉"
