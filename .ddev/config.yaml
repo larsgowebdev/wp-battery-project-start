@@ -1,4 +1,4 @@
-name: __replace-with-project-name__
+name: __your-project-name__
 type: php
 docroot: web
 php_version: "8.2"
