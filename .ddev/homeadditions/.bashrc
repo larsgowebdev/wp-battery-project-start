@@ -1,1 +1,0 @@
-alias surf='deployment/vendor/bin/surf'
