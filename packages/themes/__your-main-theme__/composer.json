@@ -1,0 +1,12 @@
+{
+  "name": "__your-vendor__/__your-main-theme__",
+  "description": "__your-main-theme__",
+  "type": "wordpress-theme",
+  "license": "GPL 2.0",
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "require": {
+    "wpengine/advanced-custom-fields-pro": "*",
+    "timber/timber": "^2.0"
+  }
+}

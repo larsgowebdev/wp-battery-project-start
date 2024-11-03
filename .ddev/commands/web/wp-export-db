@@ -1,0 +1,171 @@
+#!/bin/bash
+
+## Description: imports a dump and search+replaces with wp-cli using patterns provided in a csv file
+## Usage: wp-export-db
+## Example: "ddev wp-import-db production development db_production.sql"
+## Parameter 1: source
+## Parameter 2: target
+## Parameter 3: exportFilename
+
+source=$1
+target=$2
+exportFilename=$3
+
+tmpDir="/var/www/html/migration/_temp"
+backupDir="/var/www/html/migration/backup"
+exportDir="/var/www/html/migration/export"
+projectRootDir="/var/www/html"
+replacementsDir="/var/www/html/migration/replacements"
+localSqlDb="db"
+localSqlUser="db"
+localSqlPass="db"
+localSqlHost="db"
+now="$(date '+%Y%m%d%H%M%S')"
+
+echo ""
+echo "*** wp-export-db: begin ***"
+echo ""
+
+# warning:
+read -p "* Warning! This script will modify your local database. Please confirm you have understood what it does. ([Y]es) " -n 1 -r
+echo ""
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+  echo "* Aborting..."
+  exit
+fi
+
+# pre-check file existence
+
+echo ""
+echo "*** (0) Execute preparations... ***"
+echo ""
+
+
+# check for existence of export directory
+echo ""
+echo "* Checking: Export directory... "
+if [ ! -d $exportDir ] ; then
+  echo "  * Created export directory $exportDir";
+  mkdir -p $exportDir
+else
+  echo "  * Using existing export directory $exportDir";
+fi
+
+# check for existence of temp directory
+echo ""
+echo "* Checking: Temporary directory... "
+if [ ! -d $tmpDir ] ; then
+  echo "  * Created temporary directory $tmpDir";
+  mkdir -p $tmpDir
+else
+  echo "  * Using existing temporary directory $tmpDir";
+fi
+
+# check for replacement pattern
+echo ""
+echo "* Checking: Replacement CSV file... "
+replacementFilename="$replacementsDir/$source-to-$target.csv"
+
+if [ ! -f "$replacementFilename" ] ; then
+  echo "* Error: Replacements pattern CSV file not found in expected location $replacementFilename"
+  echo "* Please make sure the file exists and contains comma separated source and target strings for replacements in the DB."
+  echo "* Exiting with error"
+  exit
+else
+  echo "* Success: Replacement pattern file found in: $replacementFilename"
+fi
+
+echo "* Continuing with replacement patterns in $replacementFilename"
+
+# (1) create a mysqldump of the local db first:
+
+echo ""
+echo "*** (1) Create Backup of local database... ***"
+echo ""
+
+backupFilename="${backupDir}/backup-${source}-${now}.sql"
+
+mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${backupFilename}
+
+dumpSize=$(stat -c%s "$backupFilename")
+
+echo "* Wrote backup to $backupFilename ($dumpSize bytes)."
+echo "* Backup of local database complete."
+
+# (2) copy the dump into the temporary directory:
+
+echo ""
+echo "*** (2) Duplicate backup into temporary file to be restored later ... ***"
+echo ""
+
+tempFilename="${tmpDir}/_${source}.sql"
+\cp -fR ${backupFilename} ${tempFilename}
+
+echo "* Created temporary sql dump file."
+
+# (3) perform search and replace
+
+echo ""
+echo "*** (3) Perform search and replace actions in temporary db... ***"
+echo ""
+
+# check the csv file
+
+echo "* Iterating through replacement patterns in $replacementFilename..."
+
+# this hack is needed to process the last line if its not terminated (justbashthings):
+# https://fabianlee.org/2021/03/26/bash-while-statement-with-read-not-processing-last-value/
+while IFS=, read -r col1 col2 || [ -n "$col1" ]
+do
+  # check if line is not empty ([ ! -z ... ])
+  if [ ! -z "$col1" ]; then
+    # found a valid line:
+    echo "* Replacing: \"$col1\" -> \"$col2\" using wp search-replace"
+    echo "* Done! Number of replacements made for this pattern: "
+    wp search-replace "${col1}" "${col2}" --precise --all-tables --format=count;
+    echo ""
+  fi
+done < ${replacementFilename}
+
+echo "* Success: replacement complete!"
+echo "* Temporary database $localSqlDb ($target) has been updated with the dump $importFilename ($source)"
+
+# (4) Export database to target file
+
+echo ""
+echo "*** (4) Export database for target environment into file ... ***"
+echo ""
+
+echo "* exporting database from $source, migrated for $target"
+
+fullExportPath="$exportDir/$exportFilename"
+mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${fullExportPath}
+
+echo "* Exported database into $fullExportPath."
+
+# (5) restore local database with backup
+
+echo ""
+echo "*** (5) Restoring snapshot to local database... ***"
+echo ""
+
+mysql -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} < ${tempFilename}
+
+echo ""
+echo "* Restored local database $localSqlDb with snapshot in $tempFilename"
+echo "* Database of $source restored."
+
+# (6) clean up temporary directory
+
+echo ""
+echo "*** (6) Cleaning up temporary files... ***"
+echo ""
+
+rm "$tempFilename"
+
+echo "* Cleaned up temporary files in $tmpDir"
+
+echo ""
+echo "*** wp-import-db: finished ***"
+echo ""

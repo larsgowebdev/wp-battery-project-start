@@ -1,0 +1,33 @@
+.wp_defaults:
+  variables:
+    # System settings
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
+    COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composer"
+
+    # Directory structure
+    RELEASES_DIR: "${DEPLOY_PATH}/releases"
+    SHARED_DIR: "${DEPLOY_PATH}/shared"
+
+    # Deployment settings
+    KEEP_RELEASES: 3  # Default: Keep the last 3 releases
+
+    # Standard excludes for WordPress
+    RSYNC_EXCLUDES: >-
+      --exclude=.ddev
+      --exclude=.git
+      --exclude=.gitlab
+      --exclude=deployment
+      --exclude=migration 
+      --exclude=frontend
+      --exclude=node_modules
+      --exclude=.npm
+      --exclude=.composer
+      --exclude=.gitignore 
+      --exclude=.env.example
+      --exclude=readme.md
+      --exclude=vite.config.js
+      --exclude=package.json 
+      --exclude=package-lock.json
+
+    # Standard WordPress Symlinks
+    SYMLINKS: "$SHARED_DIR/web/app/uploads:/web/app/uploads $SHARED_DIR/web/app/languages:/web/app/languages $SHARED_DIR/.env:/.env"

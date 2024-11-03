@@ -1,0 +1,72 @@
+# PHPStorm
+.idea
+
+# Deployment
+/deployment/vendor
+/deployment/workspace/production.staging
+/deployment/workspace/production.production
+
+# Frontend files
+node_modules
+
+# Application: MuPlugins
+web/app/mu-plugins/*
+!web/app/mu-plugins/.gitkeep
+
+# Application: Plugins
+web/app/plugins/*
+!web/app/plugins/.gitkeep
+
+# Enable versioning of non-composer / custom plugins
+#!web/app/plugins/my-plugin
+
+# Application: mu-plugins
+web/app/mu-plugins/*/
+
+# Application: cache directories
+/web/app/cache
+/web/app/et-cache
+/web/app/ewww
+/web/app/languages/mo-cache/
+
+# Application: Themes
+web/app/themes/*
+
+# Application: Upgrade folder
+web/app/upgrade
+
+# Application: Uploads / UGC
+web/app/uploads/*
+!web/app/uploads/.gitkeep
+
+# Application: temporary files/cache
+web/app/cache/*
+
+# Application: language files
+/web/app/languages/
+
+# WordPress core
+web/wp
+
+# Logs
+*.log
+
+# Dotenv
+.env
+.env.*
+!.env.example
+
+# Composer
+/vendor
+auth.json
+
+# WP-CLI
+wp-cli.local.yml
+
+#sql dumps on root level:
+/*.sql
+/*.sql.gz
+/web/app/updraft/*
+/web/app/*.tar.gz
+/*.tar.gz
+/web/app/_uploads/

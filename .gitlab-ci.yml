@@ -1,0 +1,31 @@
+# .gitlab-ci.yml
+include:
+  - local: '.gitlab/workflows/deployment.yml'
+  - local: '.gitlab/config/staging.yml'
+  - local: '.gitlab/config/production.yml'
+
+default:
+  image: thecodingmachine/php:8.3-v4-cli-node20
+
+stages:
+  - Deployment
+
+# Staging Deployment
+Deployment Staging:
+  extends:
+    - .base_job
+    - .staging_config
+    - .deployment_script
+  stage: Deployment
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+
+# Production Deployment
+Deployment Production:
+  extends:
+    - .base_job
+    - .production_config
+    - .deployment_script
+  stage: Deployment
+  rules:
+    - if: $CI_COMMIT_BRANCH == "production"

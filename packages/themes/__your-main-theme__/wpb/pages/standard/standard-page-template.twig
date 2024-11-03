@@ -1,0 +1,32 @@
+<!doctype html>
+<html {{ site.language_attributes }}>
+
+<title>
+    {% if wp_title %}
+        {{ wp_title }} | {{ site.name }}
+    {% else %}
+        {{ site.name }}
+    {% endif %}
+</title>
+
+{{ function('wp_head') }}
+
+<body class="{{ body_class }}">
+        {% block header %}
+            {% include 'pages/header.twig' %}
+        {% endblock %}
+        
+        {% block content %}
+            <main>
+                {{post.content}}
+            </main>
+        {% endblock %}
+        
+        {% block footer %}
+            {% include 'pages/footer.twig' %}
+        {% endblock %}
+        
+        {{ function('wp_footer') }}
+</body>
+
+</html>

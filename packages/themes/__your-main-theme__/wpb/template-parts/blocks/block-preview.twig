@@ -1,0 +1,34 @@
+{% if isPreview %}
+    {# render block preview with a field list #}
+    <div class="block-preview">
+        <div class="block-preview-description">
+            <h4>Block: {{ attributes.title }}
+                <span class="smalltext">
+                    - name: {{ attributes.name }} - id: {{ attributes.id }}
+                </span>
+            </h4>
+            {% if previewFieldObjects %}
+                <h5>Fields:</h5>
+                <ul class="fields-list">
+                    {% for field in previewFieldObjects %}
+                        <li class="field-object">
+                            <span class="field-label">
+                                {{ field.label }}
+                            </span>
+                            <span class="smalltext">
+                                - name: {{ field.name }} - type: {{ field.type}} - key: {{ field.key }}
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        <div class="block-preview-content-small">
+            {# render block content - can't do it twice unless we explicitly call it #}
+            {{ block('content') }}
+        </div>
+    </div>
+{% else %}
+    {# render normal block content #}
+    {% block content %}{% endblock %}
+{% endif %}

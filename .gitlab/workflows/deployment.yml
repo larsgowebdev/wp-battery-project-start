@@ -1,0 +1,72 @@
+# .gitlab/workflows/deployment.yml
+
+.base_job:
+  cache:
+    paths:
+      - node_modules/
+      - vendor/
+      - .npm/
+      - .composer/
+  before_script:
+    - sudo apt-get update && sudo apt-get install -y ssh rsync
+    - export TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+    # base64 decode the variable stored in gitlab repo variables
+    - echo "$DEPLOY_KEY_BASE64" | base64 -d > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - eval $(ssh-agent -s)
+    - ssh-add ~/.ssh/id_rsa
+    - mkdir -p ~/.ssh
+    - ssh-keyscan $DEPLOY_SERVER >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+    - mkdir -p $NPM_CONFIG_CACHE
+    - mkdir -p $COMPOSER_CACHE_DIR
+    # Add ACF composer repo, replacing auth.json. Credentials come from gitlab repo variables
+    - composer config --global http-basic.connect.advancedcustomfields.com $COMPOSER_ACF_AUTH_USERNAME $COMPOSER_ACF_AUTH_PASSWORD
+
+.deployment_script:
+  script:
+    # Build steps
+    - npm install
+    - npm run build
+    - test -f './composer.json'
+    - composer install --no-ansi --no-interaction --no-dev --no-progress --classmap-authoritative '--ignore-platform-reqs'
+
+    # Create directories
+    - ssh $DEPLOY_USER@$DEPLOY_SERVER "mkdir -p ${RELEASES_DIR} && mkdir -p ${SHARED_DIR} && mkdir -p ${RELEASES_DIR}/${TIMESTAMP}"
+    - ssh $DEPLOY_USER@$DEPLOY_SERVER "cd ${RELEASES_DIR} && ln -snf ./${TIMESTAMP} next"
+    - ssh $DEPLOY_USER@$DEPLOY_SERVER "mkdir -p ${DEPLOY_PATH}/cache/transfer"
+
+    # Rsync files
+    - eval "rsync -q --compress --rsh=\"ssh\" --recursive --times --perms --links --delete --delete-excluded ${RSYNC_EXCLUDES} ./ $DEPLOY_USER@$DEPLOY_SERVER:${DEPLOY_PATH}/cache/transfer"
+    - ssh $DEPLOY_USER@$DEPLOY_SERVER "cp -RPp ${DEPLOY_PATH}/cache/transfer/. ${DEPLOY_PATH}/releases/${TIMESTAMP}"
+
+    # Create Symlinks
+    - |
+      IFS=' ' read -r -a SYMLINKS_ARRAY <<< "$SYMLINKS"
+      for SYMLINK in "${SYMLINKS_ARRAY[@]}"; do
+        SRC=$(echo $SYMLINK | cut -d':' -f1)
+        DEST=$(echo $SYMLINK | cut -d':' -f2)
+        ssh $DEPLOY_USER@$DEPLOY_SERVER "mkdir -p $(dirname ${RELEASES_DIR}/${TIMESTAMP}${DEST})"
+        ssh $DEPLOY_USER@$DEPLOY_SERVER "ln -sf ${SRC} ${RELEASES_DIR}/${TIMESTAMP}${DEST}"
+      done
+
+    # Switch symlinks and cleanup
+    - |
+      ssh $DEPLOY_USER@$DEPLOY_SERVER "
+        set -x
+        cd ${RELEASES_DIR} || exit 1
+        rm -rf ./previous
+        if [ -e ./current ]; then
+          mv ./current ./previous || exit 1
+        fi
+        ln -s ./${TIMESTAMP} ./current || exit 1
+      "
+
+    # Cleanup old releases (KEEP_RELEASES defines how many recent releases to keep)
+    # Excludes symlinks (current, next, previous) and keeps the N most recent releases
+    # where N is defined by KEEP_RELEASES in the configuration
+    - |
+      ssh $DEPLOY_USER@$DEPLOY_SERVER "
+        cd ${RELEASES_DIR} && \
+        ls -t | grep -v 'current\|next\|previous' | tail -n +$((KEEP_RELEASES + 1)) | xargs -r rm -rf
+      "
