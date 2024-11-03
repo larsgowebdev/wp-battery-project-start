@@ -1,5 +1,5 @@
 {
-  "name": "__your-vendor__/__your-project-name__",
+  "name": "__your-vendor__/__your-project-name__-wp-battery",
   "type": "project",
   "license": "MIT",
   "description": "WordPress boilerplate with Composer, easier configuration, and an improved folder structure",
