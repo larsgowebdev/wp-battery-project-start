@@ -1,5 +1,5 @@
 <?php
 
-use Larsgowebdev\WpPlugin\WPBatteryThemeLoader\Renderer\PageRenderer;
+use Larsgowebdev\WPBattery\Renderer\PageRenderer;
 
 PageRenderer::renderPage('standard');

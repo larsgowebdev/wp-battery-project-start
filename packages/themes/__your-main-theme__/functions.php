@@ -1,10 +1,10 @@
 <?php
 
-use Larsgowebdev\WpPlugin\WPBatteryThemeLoader\WPBatteryThemeLoader;
+use Larsgowebdev\WPBattery\WPBattery;
 
 $themeNamespace = '__your-main-theme__';
 
-$wpBatteryThemeLoader = new WPBatteryThemeLoader(
+$wpBatteryThemeLoader = new WPBattery(
     themeNamespace: $themeNamespace,
     settings: [
         'themeSupport' => [
@@ -31,4 +31,3 @@ $wpBatteryThemeLoader = new WPBatteryThemeLoader(
         'includeAdminJS' => [],
     ]
 );
-
