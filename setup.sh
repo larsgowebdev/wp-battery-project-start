@@ -235,25 +235,39 @@ fi
 # Optional deployment configuration prompt
 read -p "Would you like to configure deployment settings? (y/N) " configure_deployment
 if [[ $configure_deployment =~ ^[Yy]$ ]]; then
-    for config_file in ".gitlab/config/production.yml" ".gitlab/config/staging.yml"; do
-        if [ -f "$config_file" ]; then
-            echo -e "\nConfiguring $config_file"
-            read -p "Gitlab Deploy key variable (base64): " DEPLOY_KEY
-            read -p "Deploy user: " DEPLOY_USER
-            read -p "Deploy server: " DEPLOY_SERVER
-            read -p "Deploy path: " DEPLOY_PATH
+    # Staging configuration
+    if [ -f ".gitlab/config/staging.yml" ]; then
+        echo -e "\n${BOLD}Configuring Staging Deployment${NC}"
+        read -p "Staging Gitlab Deploy key variable (base64): " STAGING_DEPLOY_KEY
+        read -p "Staging Deploy user: " STAGING_DEPLOY_USER
+        read -p "Staging Deploy server: " STAGING_DEPLOY_SERVER
+        read -p "Staging Deploy path: " STAGING_DEPLOY_PATH
 
-            if ! check_file_exists "$config_file"; then
-                continue
-            fi
-
-            sed -i.bak "s/DEPLOY_KEY_BASE64/$DEPLOY_KEY/g" "$config_file"
-            sed -i.bak "s/DEPLOY_USER/$DEPLOY_USER/g" "$config_file"
-            sed -i.bak "s/DEPLOY_SERVER/$DEPLOY_SERVER/g" "$config_file"
-            sed -i.bak "s/DEPLOY_PATH/$DEPLOY_PATH/g" "$config_file"
-            rm "$config_file.bak"
+        if check_file_exists ".gitlab/config/staging.yml"; then
+            sed -i.bak "s/DEPLOY_KEY_BASE64/$STAGING_DEPLOY_KEY/g" ".gitlab/config/staging.yml"
+            sed -i.bak "s/DEPLOY_USER/$STAGING_DEPLOY_USER/g" ".gitlab/config/staging.yml"
+            sed -i.bak "s/DEPLOY_SERVER/$STAGING_DEPLOY_SERVER/g" ".gitlab/config/staging.yml"
+            sed -i.bak "s/DEPLOY_PATH/$STAGING_DEPLOY_PATH/g" ".gitlab/config/staging.yml"
+            rm ".gitlab/config/staging.yml.bak"
         fi
-    done
+    fi
+
+    # Production configuration
+    if [ -f ".gitlab/config/production.yml" ]; then
+        echo -e "\n${BOLD}Configuring Production Deployment${NC}"
+        read -p "Production Gitlab Deploy key variable (base64): " PROD_DEPLOY_KEY
+        read -p "Production Deploy user: " PROD_DEPLOY_USER
+        read -p "Production Deploy server: " PROD_DEPLOY_SERVER
+        read -p "Production Deploy path: " PROD_DEPLOY_PATH
+
+        if check_file_exists ".gitlab/config/production.yml"; then
+            sed -i.bak "s/DEPLOY_KEY_BASE64/$PROD_DEPLOY_KEY/g" ".gitlab/config/production.yml"
+            sed -i.bak "s/DEPLOY_USER/$PROD_DEPLOY_USER/g" ".gitlab/config/production.yml"
+            sed -i.bak "s/DEPLOY_SERVER/$PROD_DEPLOY_SERVER/g" ".gitlab/config/production.yml"
+            sed -i.bak "s/DEPLOY_PATH/$PROD_DEPLOY_PATH/g" ".gitlab/config/production.yml"
+            rm ".gitlab/config/production.yml.bak"
+        fi
+    fi
 fi
 
 print_step "Configuration complete!"
