@@ -1,6 +1,6 @@
 # WP-Battery Project Starter Kit
 
-A modern WordPress development environment with DDEV, composer, npm, and GitLab CI/CD integration.
+Starter kit for WordPress development with WP-Battery: DDEV, Composer, Vite, basic GitLab CI/CD pipeline and.
 
 ## Project Structure
 
