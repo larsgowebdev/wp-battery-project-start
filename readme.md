@@ -1,6 +1,84 @@
 # WP-Battery Project Starter Kit
 
-Starter kit for WordPress development with WP-Battery: DDEV, Composer, Vite, basic GitLab CI/CD pipeline and.
+Starter kit for WordPress development with WP-Battery: DDEV, Composer, Vite, basic GitLab CI/CD pipeline and more.
+
+## Start a fresh project (recommended quickstart)
+
+1. clone this repository into a new folder
+```bash
+git clone git@github.com:larsgowebdev/wp-battery-project-start.git my-new-project
+```
+
+2. change into the fresh folder
+```bash
+cd my-new-project
+```
+
+### Using the Setup Script
+
+1. Make the script executable:
+   ```bash
+   chmod +x setup.sh
+   ```
+
+2. Run the script:
+   ```bash
+   ./setup.sh
+   ```
+
+3. Follow the prompts to configure:
+   - Project name
+   - Vendor name
+   - Theme name
+   - PHP version
+   - Database type
+   - ACF Pro credentials (optional)
+   - Deployment settings (optional)
+
+Your project should now have its basic files initialized.
+
+### Setup ddev & install
+
+1. start the project
+```bash
+ddev start
+```
+
+2. (optional) configure dependencies in composer.json
+
+3. run composer install
+```bash
+ddev composer install
+```
+
+4. (optional) configure frontend npm dependencies in package.json
+
+5. install dependencies
+```bash
+ddev exec 'npm install && npm run build'
+```
+
+Your site will be available at `https://[project-name].ddev.site`
+
+### Connect to a fresh project git repository
+
+1. disconnect it from the project-start git (make sure you are in the new project folder before you rm -rf)
+```bash
+rm -rf .git
+```
+
+2. create your preferred git repository (github, gitlab, etc.)
+
+3. connect to the project git repository and initialize
+```bash
+git remote add origin git@host:my/repo.git
+git branch -M production
+git add .
+git commit -m "Initial commit"
+git push -u origin production
+```
+
+
 
 ## Project Structure
 
@@ -66,38 +144,6 @@ The `setup.sh` script automates the initial project setup process. It handles:
 7. Frontend build setup
 8. Deployment configuration
 
-### Using the Setup Script
-
-1. Make the script executable:
-   ```bash
-   chmod +x setup.sh
-   ```
-
-2. Run the script:
-   ```bash
-   ./setup.sh
-   ```
-
-3. Follow the prompts to configure:
-    - Project name
-    - Vendor name
-    - Theme name
-    - PHP version
-    - Database type
-    - ACF Pro credentials (optional)
-    - Deployment settings (optional)
-
-### After Setup
-
-Once the script completes, initialize your development environment:
-
-```bash
-ddev start
-ddev composer install
-ddev exec 'npm install && npm run build'
-```
-
-Your site will be available at `https://[project-name].ddev.site`
 
 ## Development
 
