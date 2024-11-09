@@ -242,12 +242,22 @@ if [[ $configure_deployment =~ ^[Yy]$ ]]; then
         read -p "Staging Deploy user: " STAGING_DEPLOY_USER
         read -p "Staging Deploy server: " STAGING_DEPLOY_SERVER
         read -p "Staging Deploy path: " STAGING_DEPLOY_PATH
+        read -p "PHP binary path (default: /usr/bin/php): " STAGING_PHP_BINARY
+        STAGING_PHP_BINARY=${STAGING_PHP_BINARY:-/usr/bin/php}
 
         if check_file_exists ".gitlab/config/staging.yml"; then
-            sed -i.bak "s/DEPLOY_KEY_BASE64/$STAGING_DEPLOY_KEY/g" ".gitlab/config/staging.yml"
-            sed -i.bak "s/DEPLOY_USER/$STAGING_DEPLOY_USER/g" ".gitlab/config/staging.yml"
-            sed -i.bak "s/DEPLOY_SERVER/$STAGING_DEPLOY_SERVER/g" ".gitlab/config/staging.yml"
-            sed -i.bak "s/DEPLOY_PATH/$STAGING_DEPLOY_PATH/g" ".gitlab/config/staging.yml"
+            # Replace values
+            sed -i.bak "s/__NAME_OF_GITLAB_DEPLOY_KEY_VARIABLE_-_BASE64ENCODED_SSH_PRIVATE_KEY/$STAGING_DEPLOY_KEY/g" ".gitlab/config/staging.yml"
+            sed -i.bak "s/__enter-your-ssh-user-here__/$STAGING_DEPLOY_USER/g" ".gitlab/config/staging.yml"
+            sed -i.bak "s/__enter-remote-ssh-server-here__/$STAGING_DEPLOY_SERVER/g" ".gitlab/config/staging.yml"
+            sed -i.bak "s/__enter\/deployment\/path\/on\/remote\/server__/$STAGING_DEPLOY_PATH/g" ".gitlab/config/staging.yml"
+            sed -i.bak "s/__enter-php-binary-path-like-usr\/bin\/php__/$STAGING_PHP_BINARY/g" ".gitlab/config/staging.yml"
+
+            # Remove comments
+            sed -i.bak 's/^[[:space:]]*#DEPLOY/    DEPLOY/g' ".gitlab/config/staging.yml"
+            sed -i.bak 's/^[[:space:]]*#PHP/    PHP/g' ".gitlab/config/staging.yml"
+            sed -i.bak 's/^[[:space:]]*#KEEP/    KEEP/g' ".gitlab/config/staging.yml"
+
             rm ".gitlab/config/staging.yml.bak"
         fi
     fi
@@ -259,12 +269,22 @@ if [[ $configure_deployment =~ ^[Yy]$ ]]; then
         read -p "Production Deploy user: " PROD_DEPLOY_USER
         read -p "Production Deploy server: " PROD_DEPLOY_SERVER
         read -p "Production Deploy path: " PROD_DEPLOY_PATH
+        read -p "PHP binary path (default: /usr/bin/php): " PROD_PHP_BINARY
+        PROD_PHP_BINARY=${PROD_PHP_BINARY:-/usr/bin/php}
 
         if check_file_exists ".gitlab/config/production.yml"; then
-            sed -i.bak "s/DEPLOY_KEY_BASE64/$PROD_DEPLOY_KEY/g" ".gitlab/config/production.yml"
-            sed -i.bak "s/DEPLOY_USER/$PROD_DEPLOY_USER/g" ".gitlab/config/production.yml"
-            sed -i.bak "s/DEPLOY_SERVER/$PROD_DEPLOY_SERVER/g" ".gitlab/config/production.yml"
-            sed -i.bak "s/DEPLOY_PATH/$PROD_DEPLOY_PATH/g" ".gitlab/config/production.yml"
+            # Replace values
+            sed -i.bak "s/__NAME_OF_GITLAB_DEPLOY_KEY_VARIABLE_-_BASE64ENCODED_SSH_PRIVATE_KEY/$PROD_DEPLOY_KEY/g" ".gitlab/config/production.yml"
+            sed -i.bak "s/__enter-your-ssh-user-here__/$PROD_DEPLOY_USER/g" ".gitlab/config/production.yml"
+            sed -i.bak "s/__enter-remote-ssh-server-here__/$PROD_DEPLOY_SERVER/g" ".gitlab/config/production.yml"
+            sed -i.bak "s/__enter\/deployment\/path\/on\/remote\/server__/$PROD_DEPLOY_PATH/g" ".gitlab/config/production.yml"
+            sed -i.bak "s/__enter-php-binary-path-like-usr\/bin\/php__/$PROD_PHP_BINARY/g" ".gitlab/config/production.yml"
+
+            # Remove comments
+            sed -i.bak 's/^[[:space:]]*#DEPLOY/    DEPLOY/g' ".gitlab/config/production.yml"
+            sed -i.bak 's/^[[:space:]]*#PHP/    PHP/g' ".gitlab/config/production.yml"
+            sed -i.bak 's/^[[:space:]]*#KEEP/    KEEP/g' ".gitlab/config/production.yml"
+
             rm ".gitlab/config/production.yml.bak"
         fi
     fi

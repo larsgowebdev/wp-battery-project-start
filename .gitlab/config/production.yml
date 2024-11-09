@@ -4,9 +4,9 @@ include:
 .production_config:
   extends: .wp_defaults
   variables:
-    DEPLOY_KEY_BASE64: $__NAME_OF_GITLAB_DEPLOY_KEY_VARIABLE_-_BASE64ENCODED_SSH_PRIVATE_KEY
-    DEPLOY_USER: "__enter-your-ssh-user-here__"
-    DEPLOY_SERVER: "__enter-remote-ssh-server-here__"
-    DEPLOY_PATH: "__enter/deployment/path/on/remote/server__"
-    PHP_BINARY: "__enter-php-binary-path-like-usr/bin/php__"
-    KEEP_RELEASES: 3 # enter number of rolling releases you want to keep
+    #DEPLOY_KEY_BASE64: $__NAME_OF_GITLAB_DEPLOY_KEY_VARIABLE_-_BASE64ENCODED_SSH_PRIVATE_KEY
+    #DEPLOY_USER: "__enter-your-ssh-user-here__"
+    #DEPLOY_SERVER: "__enter-remote-ssh-server-here__"
+    #DEPLOY_PATH: "__enter/deployment/path/on/remote/server__"
+    #PHP_BINARY: "__enter-php-binary-path-like-usr/bin/php__"
+    #KEEP_RELEASES: 3 # enter number of rolling releases you want to keep

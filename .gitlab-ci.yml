@@ -1,4 +1,13 @@
 # .gitlab-ci.yml
+
+# Prevents pipeline execution everywhere but staging/production
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging" || $CI_COMMIT_BRANCH == "production"
+      when: always
+    - when: never
+
+# Load environment configs
 include:
   - local: '.gitlab/workflows/deployment.yml'
   - local: '.gitlab/config/staging.yml'
@@ -18,7 +27,9 @@ Deployment Staging:
     - .deployment_script
   stage: Deployment
   rules:
-    - if: $CI_COMMIT_BRANCH == "staging"
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      when: always
+    - when: never
 
 # Production Deployment
 Deployment Production:
@@ -28,4 +39,6 @@ Deployment Production:
     - .deployment_script
   stage: Deployment
   rules:
-    - if: $CI_COMMIT_BRANCH == "production"
+    - if: '$CI_COMMIT_BRANCH == "production"'
+      when: always
+    - when: never
