@@ -71,6 +71,7 @@ rm -rf .git
 
 3. connect to the project git repository and initialize
 ```bash
+git init
 git remote add origin git@host:my/repo.git
 git branch -M production
 git add .
