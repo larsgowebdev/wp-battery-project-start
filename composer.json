@@ -64,8 +64,8 @@
     "wpackagist-plugin/updraftplus": "^1.24.4",
     "wpackagist-plugin/contact-form-7": "^5.9",
     "larsgowebdev/vite-asset-collector-wp": "^0.5.2",
-    "larsgowebdev/wp-battery": "^0.6.6",
-    "larsgowebdev/wp-battery-cli": "^0.6.6",
+    "larsgowebdev/wp-battery": "^0.7.1",
+    "larsgowebdev/wp-battery-cli": "^0.7.0",
 
     "__your-vendor__/__your-main-theme__": "@dev"
   },
