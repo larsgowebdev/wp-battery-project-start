@@ -171,11 +171,72 @@ Configure deployment settings in:
 - `.gitlab/config/staging.yml`
 - `.gitlab/config/production.yml`
 
-## Requirements
+#### Initial Deployment Setup
 
-- DDEV
-- Docker
-- Git
+Before the first deployment, you need to set up the remote directory structure. Use the provided setup script (make it executable first)
+
+```bash
+chmod +x setup-remote-for-deployment.sh
+```
+```bash
+./setup-remote-for-deployment.sh <environment>
+```
+Where `<environment>` is either `staging` or `production`.
+
+The script will:
+1. Read configuration from `.gitlab/config/<environment>.yml`
+2. Create the required directory structure on the remote:
+   ```
+   deployment_staging/
+   ├── cache/
+   ├── releases/
+   └── shared/
+       ├── .env
+       └── web/
+           └── app/
+               ├── languages/
+               └── uploads/
+   ```
+3. Set appropriate permissions
+4. Create an initial `.env` file if it doesn't exist
+
+##### Configuration Requirements
+
+Your environment configuration file (`.gitlab/config/<environment>.yml`) must contain:
+
+```yaml
+.<environment>_config:
+  extends: .wp_defaults
+  variables:
+    DEPLOY_USER: "your-user"
+    DEPLOY_SERVER: "your-server"
+    DEPLOY_PATH: "/path/to/deployment"
+    # ... other variables
+```
+
+Required variables:
+- `DEPLOY_USER`: SSH user for deployment
+- `DEPLOY_SERVER`: Target server hostname
+- `DEPLOY_PATH`: Absolute path for deployment directory
+
+##### Safety Features
+
+The setup script includes several safety measures:
+- Confirms all actions before execution
+- Only creates directories/files if they don't exist
+- Preserves existing `.env` files
+- Shows detailed feedback for all operations
+- Validates configuration before proceeding
+
+##### Example Usage
+
+```bash
+# Set up staging environment
+./setup-remote-for-deployment.sh staging
+
+# Set up production environment
+./setup-remote-for-deployment.sh production
+```
 
 ## Notes
 
