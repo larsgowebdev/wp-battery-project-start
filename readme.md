@@ -79,7 +79,13 @@ git commit -m "Initial commit"
 git push -u origin production
 ```
 
+### Notes
 
+- Keep sensitive credentials out of version control
+- Always work with environment variables for configuration
+- Use the provided `.gitignore` rules
+
+----
 
 ## Project Structure
 
@@ -238,8 +244,126 @@ The setup script includes several safety measures:
 ./setup-remote-for-deployment.sh production
 ```
 
-## Notes
+----
 
-- Keep sensitive credentials out of version control
-- Always work with environment variables for configuration
-- Use the provided `.gitignore` rules
+### Database Migration Scripts
+
+Two scripts are provided to help with WordPress database migrations between environments (e.g., production to development, staging to development). They handle database exports, imports, and automatically replace environment-specific values (like URLs and file paths) using replacement patterns.
+
+#### Prerequisites
+
+- DDEV environment
+- WP-CLI
+- MySQL client tools
+- CSV files containing search/replace patterns in `/migration/replacements/`
+
+#### Directory Structure
+
+```
+/migration/
+├── _temp/         # Temporary files
+├── backup/        # Database backups
+├── export/        # Exported databases
+├── import/        # Import source files
+└── replacements/  # Search/replace pattern files
+    ├── production-to-development.csv
+    ├── production-to-staging.csv
+    ├── staging-to-development.csv
+    └── ...
+```
+
+#### Replacement Pattern Files
+
+Create CSV files in the `replacements` directory with search and replace patterns. Name format: `{source}-to-{target}.csv`
+
+Example `production-to-development.csv`:
+```csv
+https://production.com,https://development.test
+/var/www/production/,/var/www/development/
+```
+
+#### Export Script: wp-export-db
+
+Exports a database while performing environment-specific replacements.
+
+```bash
+ddev wp-export-db <source> <target> <export-filename>
+```
+
+Example:
+```bash
+ddev wp-export-db development production db_for_production.sql
+```
+
+The script will:
+1. Create a backup of your current database
+2. Perform all replacements specified in the pattern file
+3. Export the modified database
+4. Restore your local database to its original state
+
+#### Import Script: wp-import-db
+
+Imports a database while performing environment-specific replacements.
+
+```bash
+ddev wp-import-db <source> <target> <import-filename>
+```
+
+Example:
+```bash
+ddev wp-import-db production development db_production.sql
+```
+
+The script will:
+1. Create a backup of your current database
+2. Import the source database
+3. Perform all replacements specified in the pattern file
+
+#### Safety Features
+
+Both scripts include several safety measures:
+- Confirmation prompt before execution
+- Automatic backup creation
+- Validation of all required files and directories
+- Error handling with automatic rollback
+- Detailed progress feedback
+- Verification of file contents
+- Protection against empty or invalid files
+
+#### Example Workflow
+
+1. **Export Production Database:**
+   ```bash
+   # On production server
+   wp db export db_production.sql
+   ```
+
+2. **Download and Place the Export:**
+   - Copy `db_production.sql` to your local `/migration/import/` directory
+   - Or place it in your project root
+
+3. **Import to Development:**
+   ```bash
+   ddev wp-import-db production development db_production.sql
+   ```
+
+4. **Make Local Changes and Export Back:**
+   ```bash
+   ddev wp-export-db development production db_for_production.sql
+   ```
+
+#### Error Recovery
+
+If a script fails during execution:
+1. Check the error message for details
+2. A backup of your database before the operation can be found in `/migration/backup/`
+3. The backup filename includes the timestamp: `backup-{environment}-{timestamp}.sql`
+4. You can manually restore using the backup if needed
+
+#### Notes
+
+- Always verify the replacement patterns in your CSV files before running the scripts
+- Keep backups before performing any database operations
+- Test imports/exports with staging environment first
+- Large databases might take longer to process
+- Scripts require appropriate MySQL permissions

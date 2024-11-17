@@ -2,15 +2,63 @@
 
 ## Description: imports a dump and search+replaces with wp-cli using patterns provided in a csv file
 ## Usage: wp-export-db
-## Example: "ddev wp-import-db production development db_production.sql"
+## Example: "ddev wp-export-db production development db_production.sql"
 ## Parameter 1: source
 ## Parameter 2: target
 ## Parameter 3: exportFilename
+
+# Exit on error
+set -e
+
+# Function to create directory with proper error handling
+create_directory() {
+    local dir="$1"
+    local dir_name="$2"
+
+    echo "* Checking: $dir_name directory... "
+    if [ ! -d "$dir" ]; then
+        echo "  * Creating $dir_name directory $dir"
+        mkdir -p "$dir" || {
+            echo "Error: Failed to create directory: $dir"
+            exit 1
+        }
+    else
+        echo "  * Using existing $dir_name directory $dir"
+    fi
+}
+
+# Function to handle database operations
+handle_db_operation() {
+    local operation="$1"
+    local command="$2"
+    local output_file="$3"
+
+    echo "* Executing $operation..."
+    if ! eval "$command"; then
+        echo "Error: Database $operation failed!"
+        exit 1
+    fi
+
+    # Verify file exists and has content
+    if [ ! -f "$output_file" ] || [ ! -s "$output_file" ]; then
+        echo "Error: Database $operation failed - output file is missing or empty!"
+        exit 1
+    fi
+}
+
+# Check required parameters
+if [ "$#" -ne 3 ]; then
+    echo "Error: Missing required parameters"
+    echo "Usage: wp-export-db <source> <target> <exportFilename>"
+    echo "Example: ddev wp-export-db production development db_production.sql"
+    exit 1
+fi
 
 source=$1
 target=$2
 exportFilename=$3
 
+# Define directories
 tmpDir="/var/www/html/migration/_temp"
 backupDir="/var/www/html/migration/backup"
 exportDir="/var/www/html/migration/export"
@@ -26,146 +74,120 @@ echo ""
 echo "*** wp-export-db: begin ***"
 echo ""
 
-# warning:
+# Warning and confirmation
 read -p "* Warning! This script will modify your local database. Please confirm you have understood what it does. ([Y]es) " -n 1 -r
 echo ""
-if [[ ! $REPLY =~ ^[Yy]$ ]]
-then
-  echo "* Aborting..."
-  exit
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "* Aborting..."
+    exit 1
 fi
-
-# pre-check file existence
 
 echo ""
 echo "*** (0) Execute preparations... ***"
 echo ""
 
+# Create required directories with error handling
+create_directory "$exportDir" "export"
+create_directory "$tmpDir" "temporary"
+create_directory "$backupDir" "backup"
 
-# check for existence of export directory
-echo ""
-echo "* Checking: Export directory... "
-if [ ! -d $exportDir ] ; then
-  echo "  * Created export directory $exportDir";
-  mkdir -p $exportDir
-else
-  echo "  * Using existing export directory $exportDir";
-fi
-
-# check for existence of temp directory
-echo ""
-echo "* Checking: Temporary directory... "
-if [ ! -d $tmpDir ] ; then
-  echo "  * Created temporary directory $tmpDir";
-  mkdir -p $tmpDir
-else
-  echo "  * Using existing temporary directory $tmpDir";
-fi
-
-# check for replacement pattern
+# Check for replacement pattern
 echo ""
 echo "* Checking: Replacement CSV file... "
 replacementFilename="$replacementsDir/$source-to-$target.csv"
 
-if [ ! -f "$replacementFilename" ] ; then
-  echo "* Error: Replacements pattern CSV file not found in expected location $replacementFilename"
-  echo "* Please make sure the file exists and contains comma separated source and target strings for replacements in the DB."
-  echo "* Exiting with error"
-  exit
-else
-  echo "* Success: Replacement pattern file found in: $replacementFilename"
+if [ ! -f "$replacementFilename" ]; then
+    echo "* Error: Replacements pattern CSV file not found in expected location $replacementFilename"
+    echo "* Please make sure the file exists and contains comma separated source and target strings for replacements in the DB."
+    exit 1
 fi
 
-echo "* Continuing with replacement patterns in $replacementFilename"
+echo "* Success: Replacement pattern file found in: $replacementFilename"
 
-# (1) create a mysqldump of the local db first:
-
+# Create backup
 echo ""
 echo "*** (1) Create Backup of local database... ***"
 echo ""
 
 backupFilename="${backupDir}/backup-${source}-${now}.sql"
-
-mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${backupFilename}
+handle_db_operation "backup" "mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${backupFilename}" "$backupFilename"
 
 dumpSize=$(stat -c%s "$backupFilename")
-
 echo "* Wrote backup to $backupFilename ($dumpSize bytes)."
 echo "* Backup of local database complete."
 
-# (2) copy the dump into the temporary directory:
-
+# Copy dump to temp
 echo ""
 echo "*** (2) Duplicate backup into temporary file to be restored later ... ***"
 echo ""
 
 tempFilename="${tmpDir}/_${source}.sql"
-\cp -fR ${backupFilename} ${tempFilename}
+if ! cp -f "${backupFilename}" "${tempFilename}"; then
+    echo "Error: Failed to create temporary copy of backup"
+    exit 1
+fi
 
-echo "* Created temporary sql dump file."
+echo "* Created temporary sql dump file: $tempFilename"
 
-# (3) perform search and replace
-
+# Perform search and replace
 echo ""
 echo "*** (3) Perform search and replace actions in temporary db... ***"
 echo ""
 
-# check the csv file
-
+# Process CSV file
 echo "* Iterating through replacement patterns in $replacementFilename..."
 
-# this hack is needed to process the last line if its not terminated (justbashthings):
-# https://fabianlee.org/2021/03/26/bash-while-statement-with-read-not-processing-last-value/
-while IFS=, read -r col1 col2 || [ -n "$col1" ]
-do
-  # check if line is not empty ([ ! -z ... ])
-  if [ ! -z "$col1" ]; then
-    # found a valid line:
-    echo "* Replacing: \"$col1\" -> \"$col2\" using wp search-replace"
-    echo "* Done! Number of replacements made for this pattern: "
-    wp search-replace "${col1}" "${col2}" --precise --all-tables --format=count;
-    echo ""
-  fi
-done < ${replacementFilename}
+while IFS=, read -r col1 col2 || [ -n "$col1" ]; do
+    if [ ! -z "$col1" ]; then
+        echo "* Replacing: \"$col1\" -> \"$col2\" using wp search-replace"
+        if ! wp search-replace "${col1}" "${col2}" --precise --all-tables --format=count; then
+            echo "Error: wp-cli search-replace operation failed"
+            echo "* Restoring database from backup..."
+            mysql -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} < ${backupFilename}
+            exit 1
+        fi
+        echo ""
+    fi
+done < "${replacementFilename}"
 
-echo "* Success: replacement complete!"
-echo "* Temporary database $localSqlDb ($target) has been updated with the dump $importFilename ($source)"
-
-# (4) Export database to target file
-
+# Export database
 echo ""
 echo "*** (4) Export database for target environment into file ... ***"
 echo ""
 
-echo "* exporting database from $source, migrated for $target"
-
 fullExportPath="$exportDir/$exportFilename"
-mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${fullExportPath}
+handle_db_operation "export" "mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${fullExportPath}" "$fullExportPath"
 
-echo "* Exported database into $fullExportPath."
+echo "* Exported database into $fullExportPath"
 
-# (5) restore local database with backup
-
+# Restore original database
 echo ""
 echo "*** (5) Restoring snapshot to local database... ***"
 echo ""
 
-mysql -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} < ${tempFilename}
+if [ ! -f "$tempFilename" ]; then
+    echo "Error: Temporary backup file not found: $tempFilename"
+    echo "* Your local database may be in an inconsistent state."
+    echo "* Please restore from: $backupFilename"
+    exit 1
+fi
 
-echo ""
+handle_db_operation "restore" "mysql -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} < ${tempFilename}" "$tempFilename"
+
 echo "* Restored local database $localSqlDb with snapshot in $tempFilename"
 echo "* Database of $source restored."
 
-# (6) clean up temporary directory
-
+# Cleanup
 echo ""
 echo "*** (6) Cleaning up temporary files... ***"
 echo ""
 
-rm "$tempFilename"
+if [ -f "$tempFilename" ]; then
+    rm "$tempFilename" || echo "Warning: Failed to remove temporary file: $tempFilename"
+fi
 
 echo "* Cleaned up temporary files in $tmpDir"
 
 echo ""
-echo "*** wp-import-db: finished ***"
+echo "*** wp-export-db: finished ***"
 echo ""

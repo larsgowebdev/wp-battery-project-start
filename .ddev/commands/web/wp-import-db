@@ -7,10 +7,62 @@
 ## Parameter 2: target
 ## Parameter 3: importFilename
 
+# Exit on error
+set -e
+
+# Function to create directory with proper error handling
+create_directory() {
+    local dir="$1"
+    local dir_name="$2"
+
+    echo "* Checking: $dir_name directory... "
+    if [ ! -d "$dir" ]; then
+        echo "  * Creating $dir_name directory $dir"
+        mkdir -p "$dir" || {
+            echo "Error: Failed to create directory: $dir"
+            exit 1
+        }
+    else
+        echo "  * Using existing $dir_name directory $dir"
+    fi
+}
+
+# Function to handle database operations
+handle_db_operation() {
+    local operation="$1"
+    local command="$2"
+    local message="$3"
+
+    echo "* Executing $operation..."
+    if ! eval "$command"; then
+        echo "Error: Database $operation failed!"
+        if [ "$operation" = "import" ]; then
+            echo "* Attempting to restore from backup: $backupFilename"
+            if ! mysql -u"${localSqlUser}" -p"${localSqlPass}" -h"${localSqlHost}" "${localSqlDb}" < "${backupFilename}"; then
+                echo "Error: Failed to restore from backup! Your database might be in an inconsistent state."
+                echo "Manual restoration may be required using: $backupFilename"
+            else
+                echo "* Successfully restored from backup"
+            fi
+        fi
+        exit 1
+    fi
+    echo "$message"
+}
+
+# Check required parameters
+if [ "$#" -ne 3 ]; then
+    echo "Error: Missing required parameters"
+    echo "Usage: wp-import-db <source> <target> <importFilename>"
+    echo "Example: ddev wp-import-db production development db_production.sql"
+    exit 1
+fi
+
 source=$1
 target=$2
 importFilename=$3
 
+# Define directories
 tmpDir="/var/www/html/migration/_temp"
 backupDir="/var/www/html/migration/backup"
 importDir="/var/www/html/migration/import"
@@ -24,118 +76,129 @@ now="$(date '+%Y%m%d%H%M%S')"
 
 echo ""
 echo "*** wp-import-db: begin ***"
+echo "=================================================="
+echo "Source environment: $source"
+echo "Target environment: $target"
+echo "Import file: $importFilename"
+echo "=================================================="
 echo ""
 
-# warning:
+# Warning and confirmation
 read -p "* Warning! This script will modify your local database. Please confirm you have understood what it does. ([Y]es) " -n 1 -r
 echo ""
-if [[ ! $REPLY =~ ^[Yy]$ ]]
-then
-  echo "* Aborting..."
-  exit
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "* Aborting..."
+    exit 1
 fi
-
-# pre-check file existence
 
 echo ""
 echo "*** (0) Execute pre-flight checks... ***"
 echo ""
 
+# Create required directories
+create_directory "$importDir" "import"
+create_directory "$backupDir" "backup"
+create_directory "$tmpDir" "temporary"
+
 replacementFilename="$replacementsDir/$source-to-$target.csv"
 
-# check for existence of dump file
-
+# Check for SQL dump file
 echo "* Check One: SQL File... "
-if [ ! -f "$importDir/$importFilename" ] ; then
-  echo "* Warning: SQL dump file not found in primary import directory. Falling back to project root directory..."
-  if [ ! -f "$projectRootDir/$importFilename"  ] ; then
-    echo "* Error: SQL dump file not found in project root directory $importDir"
-    echo "* Exiting with error"
-    exit
-  else
+finalImportSqlPath=""
+if [ -f "$importDir/$importFilename" ]; then
+    finalImportSqlPath="$importDir/$importFilename"
+    echo "* Success: SQL dump file found in primary import directory: $finalImportSqlPath"
+elif [ -f "$projectRootDir/$importFilename" ]; then
     finalImportSqlPath="$projectRootDir/$importFilename"
     echo "* Success: SQL dump file found in root directory: $finalImportSqlPath"
-  fi
 else
-  finalImportSqlPath="$importDir/$importFilename"
-  echo "* Success: SQL dump file found in primary import directory: $importDir/$importFilename"
+    echo "Error: SQL dump file not found in either:"
+    echo "  - $importDir/$importFilename"
+    echo "  - $projectRootDir/$importFilename"
+    exit 1
 fi
 
-echo "* Continuing with SQL file path $finalImportSqlPath"
+# Verify SQL file is not empty
+if [ ! -s "$finalImportSqlPath" ]; then
+    echo "Error: SQL dump file is empty: $finalImportSqlPath"
+    exit 1
+fi
+
+echo "* SQL file verification complete: $finalImportSqlPath ($(stat -c%s "$finalImportSqlPath") bytes)"
 echo ""
 
-# check for replacement pattern
-
+# Check for replacement pattern
 echo "* Check Two: Replacement CSV file... "
-if [ ! -f "$replacementFilename" ] ; then
-  echo "* Error: Replacements pattern CSV file not found in expected location $replacementFilename"
-  echo "* Please make sure the file exists and contains comma separated source and target strings for replacements in the DB."
-  echo "* Exiting with error"
-  exit
-else
-  echo "* Success: Replacement pattern file found in: $replacementFilename"
+if [ ! -f "$replacementFilename" ]; then
+    echo "Error: Replacements pattern CSV file not found: $replacementFilename"
+    echo "Please make sure the file exists and contains comma-separated source and target strings."
+    exit 1
 fi
 
-echo "* Continuing with replacement patterns in $replacementFilename"
+# Verify CSV file is not empty and has valid content
+if [ ! -s "$replacementFilename" ]; then
+    echo "Error: Replacement pattern file is empty: $replacementFilename"
+    exit 1
+fi
 
-# (1) create a mysqldump of the local db first:
+echo "* Success: Valid replacement pattern file found: $replacementFilename"
 
+# Create backup
 echo ""
 echo "*** (1) Create Backup of local database... ***"
 echo ""
 
 backupFilename="${backupDir}/backup-${target}-${now}.sql"
+handle_db_operation "backup" \
+    "mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${backupFilename}" \
+    "* Wrote backup to $backupFilename ($(stat -c%s "$backupFilename") bytes)"
 
-mysqldump -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} > ${backupFilename}
-
-dumpSize=$(stat -c%s "$backupFilename")
-
-echo "* Wrote backup to $backupFilename ($dumpSize bytes)."
-echo "* Backup of local database complete."
-
-# (2) import dump into local database
-
+# Import dump
 echo ""
 echo "*** (2) Import source dump into local database... ***"
 echo ""
 
-echo "* Importing file $importDir/$importFilename into local database $localSqlDb..."
-echo "* Source environment (the one in the SQL file): $source"
-echo "* Target environment (the one we're on): $target"
+handle_db_operation "import" \
+    "mysql -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} < $finalImportSqlPath" \
+    "* Successfully imported $finalImportSqlPath into $localSqlDb"
 
-mysql -u${localSqlUser} -p${localSqlPass} -h${localSqlHost} ${localSqlDb} < $finalImportSqlPath
-
-echo ""
-echo "* Done importing file $importDir/$importFilename into local database $localSqlDb"
-echo "* Success: Initial database import successful."
-
-# (3) perform search and replace
-
+# Perform search and replace
 echo ""
 echo "*** (3) Perform search and replace actions... ***"
 echo ""
 
-# check the csv file
+echo "* Processing replacement patterns from: $replacementFilename"
+echo "* Starting replacements..."
 
-echo "* Iterating through replacement patterns in $replacementFilename..."
-
-# this hack is needed to process the last line if its not terminated (justbashthings):
-# https://fabianlee.org/2021/03/26/bash-while-statement-with-read-not-processing-last-value/
-while IFS=, read -r col1 col2 || [ -n "$col1" ]
-do
-  # check if line is not empty ([ ! -z ... ])
-  if [ ! -z "$col1" ]; then
-    # found a valid line:
-    echo "* Replacing: \"$col1\" -> \"$col2\" using wp search-replace"
-    echo "* Done! Number of replacements made for this pattern: "
-    wp search-replace "${col1}" "${col2}" --precise --all-tables --format=count;
-    echo ""
-  fi
-done < ${replacementFilename}
-
-echo "* Success: replacement complete!"
-echo "* Local database $localSqlDb ($target) has been updated with the dump $importFilename ($source)"
+while IFS=, read -r col1 col2 || [ -n "$col1" ]; do
+    if [ ! -z "$col1" ]; then
+        echo "------------------------------------------------"
+        echo "* Replace: \"$col1\" → \"$col2\""
+        if ! replacements=$(wp search-replace "${col1}" "${col2}" --precise --all-tables --format=count); then
+            echo "Error: wp-cli search-replace operation failed"
+            echo "* Attempting to restore from backup..."
+            if ! mysql -u"${localSqlUser}" -p"${localSqlPass}" -h"${localSqlHost}" "${localSqlDb}" < "${backupFilename}"; then
+                echo "Error: Failed to restore from backup! Your database might be in an inconsistent state."
+                echo "Manual restoration may be required using: $backupFilename"
+            else
+                echo "* Successfully restored from backup"
+            fi
+            exit 1
+        fi
+        echo "* Completed: $replacements replacements made"
+        echo "------------------------------------------------"
+    fi
+done < "${replacementFilename}"
 
 echo ""
-echo "*** wp-import-db: finished ***"
+echo "* Success: All replacements completed!"
+echo "* Local database $localSqlDb ($target) has been updated with $importFilename ($source)"
+
+echo ""
+echo "=================================================="
+echo "*** wp-import-db: finished successfully ***"
+echo "* Source: $source"
+echo "* Target: $target"
+echo "* Backup location: $backupFilename"
+echo "=================================================="
 echo ""
