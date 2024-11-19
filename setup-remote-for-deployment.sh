@@ -90,7 +90,7 @@ confirm_execution() {
     echo "   - $DEPLOY_PATH/shared/web/app/languages"
     echo "   - $DEPLOY_PATH/shared/web/app/uploads"
     echo "2. Create .env file if not exists at:"
-    echo "   - $DEPLOY_PATH/shared/web/.env"
+    echo "   - $DEPLOY_PATH/shared/.env"
     echo "3. Set appropriate permissions (755 for dirs, 644 for files)"
     echo "=============================================="
 
@@ -177,7 +177,7 @@ create_remote_structure() {
     done
 
     # Check and create .env file
-    local env_path="$DEPLOY_PATH/shared/web/.env"
+    local env_path="$DEPLOY_PATH/shared/.env"
     if check_remote_path "$env_path"; then
         echo "! .env file already exists. Skipping creation to prevent overwriting existing configuration."
         echo "  Location: $env_path"
