@@ -158,9 +158,13 @@ if [ -f .env.example ] && ! [ -f .env ]; then
     sed -i.bak 's/^DB_PASSWORD=.*/DB_PASSWORD=db/' .env
     sed -i.bak 's/^DB_HOST=.*/DB_HOST=db/' .env
 
+    # Set WordPress Protocol and Domain
+    sed -i.bak "s|^WP_PROTOCOL=.*|WP_PROTOCOL='https://'|" .env
+    sed -i.bak "s|^WP_DOMAIN=.*|WP_DOMAIN='$DDEV_URL'|" .env
+
     # Set WordPress URLs
-    sed -i.bak "s|^WP_HOME=.*|WP_HOME=https://$DDEV_URL|" .env
-    sed -i.bak 's|^WP_SITEURL=.*|WP_SITEURL=${WP_HOME}/wp|' .env
+    sed -i.bak 's|^WP_HOME=.*|WP_HOME="${WP_PROTOCOL}${WP_DOMAIN}"|' .env
+    sed -i.bak 's|^WP_SITEURL=.*|WP_SITEURL="${WP_HOME}/wp"|' .env
 
     # Generate and set WordPress salts
     for salt in AUTH_KEY SECURE_AUTH_KEY LOGGED_IN_KEY NONCE_KEY AUTH_SALT SECURE_AUTH_SALT LOGGED_IN_SALT NONCE_SALT; do
