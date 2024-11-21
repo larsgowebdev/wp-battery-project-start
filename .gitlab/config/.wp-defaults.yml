@@ -13,25 +13,25 @@
 
     # Standard excludes for WordPress
     RSYNC_EXCLUDES: >-
-      --exclude=.ddev
-      --exclude=.git
-      --exclude=.gitlab
-      --exclude=.gitlab-ci.yml
-      --exclude=deployment
-      --exclude=migration 
-      --exclude=frontend
-      --exclude=node_modules
-      --exclude=.npm
-      --exclude=.composer
-      --exclude=.gitignore 
-      --exclude=.env.example
-      --exclude=auth.json.example
-      --exclude=readme.md
-      --exclude=vite.config.js
-      --exclude=package.json 
-      --exclude=package-lock.json
-      --exclude=setup.sh
-      --exclude=setup-remote-for-deployment.sh
+      --exclude=/.ddev
+      --exclude=/.git
+      --exclude=/.gitlab
+      --exclude=/.gitlab-ci.yml
+      --exclude=/deployment
+      --exclude=/migration 
+      --exclude=/frontend
+      --exclude=/node_modules
+      --exclude=/.npm
+      --exclude=/.composer
+      --exclude=/.gitignore 
+      --exclude=/.env.example
+      --exclude=/auth.json.example
+      --exclude=/readme.md
+      --exclude=/vite.config.js
+      --exclude=/package.json 
+      --exclude=/package-lock.json
+      --exclude=/setup.sh
+      --exclude=/setup-remote-for-deployment.sh
 
     # Standard WordPress Symlinks
     SYMLINKS: "$SHARED_DIR/web/app/uploads:/web/app/uploads $SHARED_DIR/web/app/languages:/web/app/languages $SHARED_DIR/.env:/.env"
