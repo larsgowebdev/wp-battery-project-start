@@ -1,0 +1,143 @@
+#!/bin/bash
+
+## Description: Pulls a database from a remote environment and imports it locally
+## Usage: wp-pull-db <environment> [--skip-backup]
+## Example: "ddev wp-pull-db staging" or "ddev wp-pull-db production --skip-backup"
+
+# Check if environment parameter is provided
+if [ -z "$1" ]; then
+    echo "Error: Environment parameter is required (staging or production)"
+    echo "Usage: wp-pull-db <environment> [--skip-backup]"
+    exit 1
+fi
+
+ENVIRONMENT=$1
+SKIP_BACKUP=false
+
+# Check for optional --skip-backup parameter
+if [ "$2" = "--skip-backup" ]; then
+    SKIP_BACKUP=true
+fi
+
+# Configuration paths
+CONFIG_FILE=".gitlab/config/${ENVIRONMENT}.yml"
+DUMP_FILENAME="db_${ENVIRONMENT}_$(date '+%Y%m%d%H%M%S').sql"
+LOCAL_DUMP_PATH="/var/www/html/${DUMP_FILENAME}"
+
+# Text formatting
+BOLD='\033[1m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Helper functions
+print_error() {
+    echo -e "${RED}${BOLD}Error: $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}${BOLD}Warning: $1${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}${BOLD}$1${NC}"
+}
+
+# Check if we're in a DDEV environment
+if [ -z "$DDEV_DOCROOT" ]; then
+    print_error "This script must be run within a DDEV environment"
+    exit 1
+fi
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    print_error "Configuration file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Extract deployment configuration
+DEPLOY_USER=$(grep "DEPLOY_USER:" "$CONFIG_FILE" | awk -F'"' '{print $2}')
+DEPLOY_SERVER=$(grep "DEPLOY_SERVER:" "$CONFIG_FILE" | awk -F'"' '{print $2}')
+DEPLOY_PATH=$(grep "DEPLOY_PATH:" "$CONFIG_FILE" | awk -F'"' '{print $2}')
+
+if [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SERVER" ] || [ -z "$DEPLOY_PATH" ]; then
+    print_error "Could not extract all required deployment configuration"
+    exit 1
+fi
+
+echo -e "\n${BOLD}Database Pull Operation - $ENVIRONMENT${NC}"
+echo "Remote Server: $DEPLOY_USER@$DEPLOY_SERVER"
+echo "Remote Path: $DEPLOY_PATH"
+
+# Warning and confirmation
+echo -e "\n${YELLOW}${BOLD}Warning!${NC} This will:"
+echo "1. Connect to $DEPLOY_SERVER"
+echo "2. Create a dump of the remote database"
+echo "3. Download the dump to your local machine"
+echo "4. Overwrite your local database with the imported data"
+
+read -p "Do you want to continue? [y/N] " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Operation cancelled"
+    exit 1
+fi
+
+# Test SSH connection and .env file existence
+echo -e "\nTesting SSH connection and checking remote .env file..."
+if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "test -f ${DEPLOY_PATH}/shared/.env"; then
+    print_error "Could not find .env file at ${DEPLOY_PATH}/shared/.env"
+    exit 1
+fi
+
+# Read remote database configuration
+echo "Reading remote database configuration..."
+
+# Get database credentials from remote .env file (handling CRLF line endings)
+REMOTE_ENV_VARS=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "
+    tr -d '\r' < ${DEPLOY_PATH}/shared/.env | grep -E '^DB_(NAME|USER|PASSWORD)=' | sed -e 's/^[^=]*=//' -e 's/^\"*//' -e 's/\"*$//'
+")
+
+# Parse the output into separate variables (one per line)
+REMOTE_DB_NAME=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '1p' | tr -d '\r')
+REMOTE_DB_USER=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '2p' | tr -d '\r')
+REMOTE_DB_PASS=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '3p' | tr -d '\r')
+
+if [ -z "$REMOTE_DB_NAME" ] || [ -z "$REMOTE_DB_USER" ] || [ -z "$REMOTE_DB_PASS" ]; then
+    print_error "Could not extract all required database credentials from remote .env file"
+    exit 1
+fi
+
+# Create remote database dump
+echo "Creating database dump on remote server..."
+REMOTE_TEMP_DUMP="/tmp/${DUMP_FILENAME}"
+
+# Execute the dump command on remote server with proper escaping
+DUMP_CMD="mysqldump -u${REMOTE_DB_USER} -p'${REMOTE_DB_PASS}' --no-tablespaces --single-transaction --allow-keywords --complete-insert --insert-ignore --routines --events --force ${REMOTE_DB_NAME} > '${REMOTE_TEMP_DUMP}' 2>/tmp/mysql_error"
+
+if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "${DUMP_CMD}"; then
+    ERROR_OUTPUT=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat /tmp/mysql_error")
+    print_error "Failed to create database dump: ${ERROR_OUTPUT}"
+    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -f /tmp/mysql_error"
+    exit 1
+fi
+
+# Download the dump file
+echo "Downloading database dump..."
+scp -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}:${REMOTE_TEMP_DUMP}" "${LOCAL_DUMP_PATH}"
+
+# Clean up remote temporary file
+ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -f '${REMOTE_TEMP_DUMP}' /tmp/mysql_error"
+
+# Import the database using wp-import-db
+echo "Importing database using wp-import-db..."
+bash /mnt/ddev_config/commands/web/wp-import-db "$ENVIRONMENT" "development" "$DUMP_FILENAME"
+
+if [ $? -ne 0 ]; then
+    print_error "Database import failed"
+    exit 1
+fi
+
+print_success "Database pull and import completed successfully! 🎉"
+echo "Dump file saved as: $DUMP_FILENAME"

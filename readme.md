@@ -256,6 +256,7 @@ Two scripts are provided to help with WordPress database migrations between envi
 - WP-CLI
 - MySQL client tools
 - CSV files containing search/replace patterns in `/migration/replacements/`
+- SSH access to remote environments
 
 #### Directory Structure
 
@@ -319,38 +320,145 @@ The script will:
 2. Import the source database
 3. Perform all replacements specified in the pattern file
 
+#### Pull Database Script: wp-pull-db
+
+Pulls a database from a remote environment and imports it locally.
+
+```bash
+ddev wp-pull-db <environment> [--skip-backup]
+```
+
+Example:
+```bash
+ddev wp-pull-db staging
+ddev wp-pull-db production --skip-backup
+```
+
+The script will:
+1. Connect to the remote server specified in your environment configuration
+2. Create a dump of the remote database
+3. Download the dump to your local machine
+4. Import the database using wp-import-db
+5. Perform environment-specific replacements automatically
+
+#### Push Database Script: wp-push-db
+
+Pushes your local database to a remote environment after performing necessary replacements.
+
+```bash
+ddev wp-push-db <environment>
+```
+
+Example:
+```bash
+ddev wp-push-db staging
+```
+
+The script will:
+1. Create a backup of the remote database
+2. Export your local database with environment-specific replacements
+3. Upload the prepared database to the remote server
+4. Import the database on the remote server
+
+**Note:** This script requires explicit confirmation by typing "yes, push to <environment>" due to its potentially destructive nature.
+
+#### Pull User-Generated Content: wp-pull-ugc
+
+Synchronizes user-generated content (uploads) from a remote environment to your local environment.
+
+```bash
+ddev wp-pull-ugc <environment>
+```
+
+Example:
+```bash
+ddev wp-pull-ugc staging
+```
+
+The script will:
+1. Connect to the remote server
+2. Sync files from the remote uploads directory
+3. Only download new or modified files
+4. Preserve your local files
+
+Uses rsync with delta-transfer algorithm for efficient file transfer.
+
+#### Push User-Generated Content: wp-push-ugc
+
+Pushes your local user-generated content to a remote environment.
+
+```bash
+ddev wp-push-ugc <environment>
+```
+
+Example:
+```bash
+ddev wp-push-ugc staging
+```
+
+The script will:
+1. Push your local uploads to the remote environment
+2. Only upload new or modified files
+3. Update remote files if local versions are newer
+
+**Note:** Like wp-push-db, this script requires explicit confirmation due to its potential to modify remote content.
+
 #### Safety Features
 
-Both scripts include several safety measures:
-- Confirmation prompt before execution
+All scripts include several safety measures:
+- Confirmation prompts before execution (extra strict for push operations)
 - Automatic backup creation
 - Validation of all required files and directories
 - Error handling with automatic rollback
 - Detailed progress feedback
-- Verification of file contents
+- Verification of file contents and permissions
 - Protection against empty or invalid files
+- SSH connection testing
+- Remote environment validation
 
-#### Example Workflow
+#### Example Workflows
 
-1. **Export Production Database:**
+1. **Initial Development Setup:**
    ```bash
-   # On production server
-   wp db export db_production.sql
+   # Pull database and content from production
+   ddev wp-pull-db production
+   ddev wp-pull-ugc production
    ```
 
-2. **Download and Place the Export:**
-   - Copy `db_production.sql` to your local `/migration/import/` directory
-   - Or place it in your project root
-
-3. **Import to Development:**
+2. **Sync Staging Environment:**
    ```bash
-   ddev wp-import-db production development db_production.sql
+   # Push local changes to staging
+   ddev wp-push-db staging
+   ddev wp-push-ugc staging
    ```
 
-4. **Make Local Changes and Export Back:**
+3. **Update Local Environment:**
    ```bash
-   ddev wp-export-db development production db_for_production.sql
+   # Get latest content from staging
+   ddev wp-pull-db staging
+   ddev wp-pull-ugc staging
    ```
+
+4. **Production Deployment:**
+   ```bash
+   # Carefully push changes to production
+   ddev wp-push-db production
+   ddev wp-push-ugc production
+   ```
+
+#### Environment Configuration
+
+All scripts rely on environment configuration files located in `.gitlab/config/<environment>.yml`. These files should contain:
+- DEPLOY_USER
+- DEPLOY_SERVER
+- DEPLOY_PATH
+
+Example configuration:
+```yaml
+DEPLOY_USER: "username"
+DEPLOY_SERVER: "example.com"
+DEPLOY_PATH: "/path/to/deployment"
+```
 
 #### Error Recovery
 
