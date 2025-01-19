@@ -22,6 +22,7 @@
     - mkdir -p $COMPOSER_CACHE_DIR
     # Add ACF composer repo, replacing auth.json. Credentials come from gitlab repo variables
     - composer config --global http-basic.connect.advancedcustomfields.com $COMPOSER_ACF_AUTH_USERNAME $COMPOSER_ACF_AUTH_PASSWORD
+    - composer config --global http-basic.borlabs-cookie.composer.borlabs.io irrelevant $COMPOSER_BORLABS_COOKIE_AUTH
 
 .deployment_script:
   script:

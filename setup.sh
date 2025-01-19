@@ -125,10 +125,14 @@ select DB_TYPE in "${DB_VERSIONS[@]}"; do
     echo "Please select a valid option"
 done
 
-# Optional ACF Pro configuration
+# First optional step: ACF Pro configuration
 echo -e "\n${BOLD}ACF Pro Configuration (press Enter to skip)${NC}"
 read -p "ACF Pro license key: " ACF_KEY
 read -p "ACF Pro associated domain: " ACF_DOMAIN
+
+# Second optional step: Borlabs Cookie configuration
+echo -e "\n${BOLD}Borlabs Cookie Configuration (press Enter to skip)${NC}"
+read -p "Borlabs Cookie license key: " BORLABS_KEY
 
 # Start replacement process
 print_step "Setting up project structure..."
@@ -215,25 +219,34 @@ if [ -f composer.json ]; then
     fi
 fi
 
-# Set up auth.json if ACF credentials were provided
-if [ -n "$ACF_KEY" ] && [ -n "$ACF_DOMAIN" ] && [ -f auth.json.example ] && ! [ -f auth.json ]; then
+# Set up auth.json if any credentials were provided
+if [ -f auth.json.example ] && ! [ -f auth.json ]; then
     cp auth.json.example auth.json
-    sed -i.bak "s/\"username\":.*/\"username\": \"$ACF_KEY\",/g" auth.json
-    sed -i.bak "s/\"password\":.*/\"password\": \"$ACF_DOMAIN\"/g" auth.json
+
+    # Initialize the auth.json with an empty JSON object
+    echo "{}" > auth.json
+
+    # Add ACF configuration if credentials were provided
+    if [ -n "$ACF_KEY" ] && [ -n "$ACF_DOMAIN" ]; then
+        print_step "Adding ACF Pro credentials..."
+        sed -i.bak "s/{/{\n  \"advanced-custom-fields.composer.login\": {\n    \"username\": \"$ACF_KEY\",\n    \"password\": \"$ACF_DOMAIN\"\n  }/g" auth.json
+    fi
+
+    # Add Borlabs configuration if key was provided
+    if [ -n "$BORLABS_KEY" ]; then
+        print_step "Adding Borlabs Cookie credentials..."
+        if [ -n "$ACF_KEY" ] && [ -n "$ACF_DOMAIN" ]; then
+            # If ACF was added, we need a comma
+            sed -i.bak "s/  }/  },\n  \"borlabs-cookie.composer.borlabs.io\": {\n    \"username\": \"irrelevant\",\n    \"password\": \"$BORLABS_KEY\"\n  }/g" auth.json
+        else
+            # If no ACF, just add Borlabs
+            sed -i.bak "s/{}/{  \"borlabs-cookie.composer.borlabs.io\": {\n    \"username\": \"irrelevant\",\n    \"password\": \"$BORLABS_KEY\"\n  }}/g" auth.json
+        fi
+    fi
+
     rm auth.json.bak
 elif [ -f auth.json ]; then
-    print_warning "auth.json already exists, skipping ACF configuration"
-fi
-
-# 5. Frontend Setup
-print_step "Setting up frontend..."
-if [ -f vite.config.js ]; then
-    if ! check_file_exists "vite.config.js"; then
-        print_step "Skipping frontend setup..."
-    else
-        sed -i.bak "s/__your-main-theme__/$THEME_NAME/g" vite.config.js
-        rm vite.config.js.bak
-    fi
+    print_warning "auth.json already exists, skipping authentication configuration"
 fi
 
 # Optional deployment configuration prompt
