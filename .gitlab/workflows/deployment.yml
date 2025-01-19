@@ -20,9 +20,18 @@
     - chmod 644 ~/.ssh/known_hosts
     - mkdir -p $NPM_CONFIG_CACHE
     - mkdir -p $COMPOSER_CACHE_DIR
-    # Add ACF composer repo, replacing auth.json. Credentials come from gitlab repo variables
-    - composer config --global http-basic.connect.advancedcustomfields.com $COMPOSER_ACF_AUTH_USERNAME $COMPOSER_ACF_AUTH_PASSWORD
-    - composer config --global http-basic.borlabs-cookie.composer.borlabs.io irrelevant $COMPOSER_BORLABS_COOKIE_AUTH
+    # Fix git ownership issue with dynamic project path
+    - git config --global --add safe.directory $CI_PROJECT_DIR
+    # Add ACF composer repo if credentials exist
+    - |
+      if [ ! -z "$COMPOSER_ACF_AUTH_USERNAME" ] && [ ! -z "$COMPOSER_ACF_AUTH_PASSWORD" ]; then
+        composer config --global http-basic.connect.advancedcustomfields.com $COMPOSER_ACF_AUTH_USERNAME $COMPOSER_ACF_AUTH_PASSWORD
+      fi
+    # Add Borlabs Cookie auth if credentials exist
+    - |
+      if [ ! -z "$COMPOSER_BORLABS_COOKIE_AUTH" ]; then
+        composer config --global http-basic.borlabs-cookie.composer.borlabs.io irrelevant $COMPOSER_BORLABS_COOKIE_AUTH
+      fi
 
 .deployment_script:
   script:
