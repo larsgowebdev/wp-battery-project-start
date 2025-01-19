@@ -36,8 +36,12 @@
 .deployment_script:
   script:
     # Build steps
-    - npm install
-    - npm run build
+    # Conditional npm steps
+    - |
+      if [ -f "package.json" ]; then
+        npm install
+        npm run build
+      fi
     - test -f './composer.json'
     - composer install --no-ansi --no-interaction --no-dev --no-progress --classmap-authoritative '--ignore-platform-reqs'
 
