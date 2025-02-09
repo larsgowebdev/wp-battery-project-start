@@ -97,23 +97,43 @@ if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "test -f 
     exit 1
 fi
 
+# create temp directory
+echo "Creating temporary directory for transfer..."
+REMOTE_TEMP_DIR="${DEPLOY_PATH}/temp_transfer"
+if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "mkdir -p '${REMOTE_TEMP_DIR}'"; then
+    print_error "Failed to create temporary directory"
+    exit 1
+fi
+
 # Read remote database configuration
 echo "Reading remote database configuration..."
 
 # Get database credentials from remote .env file (handling CRLF line endings)
 REMOTE_ENV_VARS=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "
-    tr -d '\r' < ${DEPLOY_PATH}/shared/.env | grep -E '^DB_(NAME|USER|PASSWORD)=' | sed -e 's/^[^=]*=//' -e 's/^\"*//' -e 's/\"*$//'
+    tr -d '\r' < ${DEPLOY_PATH}/shared/.env | grep -E '^DB_(NAME|USER|PASSWORD|HOST)=' | sed -e 's/^[^=]*=//' -e 's/^\"*//' -e 's/\"*$//'
 ")
 
 # Parse the output into separate variables
 REMOTE_DB_NAME=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '1p' | tr -d '\r')
 REMOTE_DB_USER=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '2p' | tr -d '\r')
 REMOTE_DB_PASS=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '3p' | tr -d '\r')
+REMOTE_DB_HOST=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '4p' | tr -d '\r')
 
-if [ -z "$REMOTE_DB_NAME" ] || [ -z "$REMOTE_DB_USER" ] || [ -z "$REMOTE_DB_PASS" ]; then
+if [ -z "$REMOTE_DB_NAME" ] || [ -z "$REMOTE_DB_USER" ] || [ -z "$REMOTE_DB_PASS" ] || [ -z "$REMOTE_DB_HOST" ]; then
     print_error "Could not extract all required database credentials from remote .env file"
     exit 1
 fi
+
+# Create temporary my.cnf with credentials
+echo "Creating temporary MySQL config..."
+MYSQL_CNF="${REMOTE_TEMP_DIR}/temp.my.cnf"
+ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat > '${MYSQL_CNF}' << EOF
+[client]
+host=${REMOTE_DB_HOST}
+user=${REMOTE_DB_USER}
+password=${REMOTE_DB_PASS}
+EOF
+chmod 600 '${MYSQL_CNF}'"
 
 # Export local database with replacements
 echo "Exporting local database with environment-specific replacements..."
@@ -122,23 +142,37 @@ if ! bash /mnt/ddev_config/commands/web/wp-export-db "development" "$ENVIRONMENT
     exit 1
 fi
 
-# Upload the prepared dump file
-echo "Uploading database dump..."
-REMOTE_TEMP_DUMP="/tmp/${DUMP_FILENAME}"
-if ! scp -o StrictHostKeyChecking=no "/var/www/html/migration/export/${DUMP_FILENAME}" "${DEPLOY_USER}@${DEPLOY_SERVER}:${REMOTE_TEMP_DUMP}"; then
-    print_error "Failed to upload database dump"
+# After reading remote database configuration
+echo "Creating and verifying temporary directory..."
+REMOTE_TEMP_DIR="${DEPLOY_PATH}/temp_transfer"
+
+# Create directory
+if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "mkdir -p '${REMOTE_TEMP_DIR}'"; then
+    print_error "Failed to create temporary directory"
     exit 1
 fi
 
+# Upload using rsync
+echo "Uploading database dump..."
+if ! rsync -av --progress "/var/www/html/migration/export/${DUMP_FILENAME}" "${DEPLOY_USER}@${DEPLOY_SERVER}:${REMOTE_TEMP_DIR}/"; then
+    print_error "Failed to upload database dump"
+    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -rf '${REMOTE_TEMP_DIR}'" || true
+    exit 1
+fi
+
+# Update the REMOTE_TEMP_DUMP variable to point to the uploaded file
+REMOTE_TEMP_DUMP="${REMOTE_TEMP_DIR}/${DUMP_FILENAME}"
+
+# Create backup of remote database
 # Create backup of remote database
 echo "Creating backup of remote database..."
 REMOTE_BACKUP="db_backup_${ENVIRONMENT}_$(date '+%Y%m%d%H%M%S').sql"
-BACKUP_CMD="mysqldump -u${REMOTE_DB_USER} -p'${REMOTE_DB_PASS}' --no-tablespaces --single-transaction --allow-keywords --complete-insert --insert-ignore --routines --events --force ${REMOTE_DB_NAME} > '${DEPLOY_PATH}/${REMOTE_BACKUP}' 2>/tmp/mysql_error"
+BACKUP_CMD="mysqldump --defaults-file='${MYSQL_CNF}' --no-tablespaces --single-transaction --allow-keywords --complete-insert --insert-ignore --routines --events --force ${REMOTE_DB_NAME} > '${DEPLOY_PATH}/${REMOTE_BACKUP}' 2>'${REMOTE_TEMP_DIR}/mysql_error'"
 
 if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "${BACKUP_CMD}"; then
-    ERROR_OUTPUT=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat /tmp/mysql_error")
+    ERROR_OUTPUT=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat '${REMOTE_TEMP_DIR}/mysql_error'")
     print_error "Failed to create remote backup: ${ERROR_OUTPUT}"
-    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -f /tmp/mysql_error"
+    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -rf '${REMOTE_TEMP_DIR}'"
     exit 1
 fi
 
@@ -146,17 +180,17 @@ print_success "Remote backup created: ${REMOTE_BACKUP}"
 
 # Import the dump on the remote server
 echo "Importing database on remote server..."
-IMPORT_CMD="mysql -u${REMOTE_DB_USER} -p'${REMOTE_DB_PASS}' ${REMOTE_DB_NAME} < '${REMOTE_TEMP_DUMP}' 2>/tmp/mysql_error"
+IMPORT_CMD="mysql --defaults-file='${MYSQL_CNF}' ${REMOTE_DB_NAME} < '${REMOTE_TEMP_DUMP}' 2>'${REMOTE_TEMP_DIR}/mysql_error'"
 
 if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "${IMPORT_CMD}"; then
-    ERROR_OUTPUT=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat /tmp/mysql_error")
+    ERROR_OUTPUT=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat '${REMOTE_TEMP_DIR}/mysql_error'")
     print_error "Failed to import database: ${ERROR_OUTPUT}"
-    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -f /tmp/mysql_error ${REMOTE_TEMP_DUMP}"
+    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -rf '${REMOTE_TEMP_DIR}'"
     exit 1
 fi
 
 # Clean up remote temporary files
-ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -f '${REMOTE_TEMP_DUMP}' /tmp/mysql_error"
+ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -rf '${REMOTE_TEMP_DIR}'"
 
 print_success "Database push completed successfully! 🎉"
 echo "The database has been pushed to $ENVIRONMENT"

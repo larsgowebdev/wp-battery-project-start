@@ -96,45 +96,69 @@ echo "Reading remote database configuration..."
 
 # Get database credentials from remote .env file (handling CRLF line endings)
 REMOTE_ENV_VARS=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "
-    tr -d '\r' < ${DEPLOY_PATH}/shared/.env | grep -E '^DB_(NAME|USER|PASSWORD)=' | sed -e 's/^[^=]*=//' -e 's/^\"*//' -e 's/\"*$//'
+    tr -d '\r' < ${DEPLOY_PATH}/shared/.env | grep -E '^DB_(NAME|USER|PASSWORD|HOST)=' | sed -e 's/^[^=]*=//' -e 's/^\"*//' -e 's/\"*$//'
 ")
 
-# Parse the output into separate variables (one per line)
+# Parse the output into separate variables
 REMOTE_DB_NAME=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '1p' | tr -d '\r')
 REMOTE_DB_USER=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '2p' | tr -d '\r')
 REMOTE_DB_PASS=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '3p' | tr -d '\r')
+REMOTE_DB_HOST=$(echo "$REMOTE_ENV_VARS" | grep -E '^[^=]*$' | sed -n '4p' | tr -d '\r')
 
-if [ -z "$REMOTE_DB_NAME" ] || [ -z "$REMOTE_DB_USER" ] || [ -z "$REMOTE_DB_PASS" ]; then
+if [ -z "$REMOTE_DB_NAME" ] || [ -z "$REMOTE_DB_USER" ] || [ -z "$REMOTE_DB_PASS" ] || [ -z "$REMOTE_DB_HOST" ]; then
     print_error "Could not extract all required database credentials from remote .env file"
     exit 1
 fi
 
-# Create remote database dump
-echo "Creating database dump on remote server..."
-REMOTE_TEMP_DUMP="/tmp/${DUMP_FILENAME}"
+# Create temporary directory on remote server
+echo "Creating temporary directory for transfer..."
+REMOTE_TEMP_DIR="${DEPLOY_PATH}/temp_transfer"
 
-# Execute the dump command on remote server with proper escaping
-DUMP_CMD="mysqldump -u${REMOTE_DB_USER} -p'${REMOTE_DB_PASS}' --no-tablespaces --single-transaction --allow-keywords --complete-insert --insert-ignore --routines --events --force ${REMOTE_DB_NAME} > '${REMOTE_TEMP_DUMP}' 2>/tmp/mysql_error"
-
-if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "${DUMP_CMD}"; then
-    ERROR_OUTPUT=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat /tmp/mysql_error")
-    print_error "Failed to create database dump: ${ERROR_OUTPUT}"
-    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -f /tmp/mysql_error"
+# Create directory and verify it exists
+if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "mkdir -p '${REMOTE_TEMP_DIR}' && test -d '${REMOTE_TEMP_DIR}' && test -w '${REMOTE_TEMP_DIR}'"; then
+    print_error "Failed to create or verify temporary directory"
     exit 1
 fi
 
-# Download the dump file
-echo "Downloading database dump..."
-scp -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}:${REMOTE_TEMP_DUMP}" "${LOCAL_DUMP_PATH}"
+# Create MySQL config file
+echo "Creating temporary MySQL config..."
+MYSQL_CNF="${REMOTE_TEMP_DIR}/temp.my.cnf"
+ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat > '${MYSQL_CNF}' << EOF
+[client]
+host=${REMOTE_DB_HOST}
+user=${REMOTE_DB_USER}
+password=${REMOTE_DB_PASS}
+EOF
+chmod 600 '${MYSQL_CNF}'"
 
-# Clean up remote temporary file
-ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -f '${REMOTE_TEMP_DUMP}' /tmp/mysql_error"
+# Create remote database dump
+echo "Creating database dump on remote server..."
+REMOTE_TEMP_DUMP="${REMOTE_TEMP_DIR}/${DUMP_FILENAME}"
+
+# Execute the dump command on remote server using the config file
+DUMP_CMD="mysqldump --defaults-file='${MYSQL_CNF}' --no-tablespaces --single-transaction --allow-keywords --complete-insert --insert-ignore --routines --events --force ${REMOTE_DB_NAME} > '${REMOTE_TEMP_DUMP}' 2>'${REMOTE_TEMP_DIR}/mysql_error'"
+
+if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "${DUMP_CMD}"; then
+    ERROR_OUTPUT=$(ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "cat '${REMOTE_TEMP_DIR}/mysql_error'")
+    print_error "Failed to create database dump: ${ERROR_OUTPUT}"
+    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -rf '${REMOTE_TEMP_DIR}'"
+    exit 1
+fi
+
+# Download the dump file using rsync
+echo "Downloading database dump..."
+if ! rsync -av "${DEPLOY_USER}@${DEPLOY_SERVER}:${REMOTE_TEMP_DUMP}" "${LOCAL_DUMP_PATH}"; then
+    print_error "Failed to download database dump"
+    ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -rf '${REMOTE_TEMP_DIR}'"
+    exit 1
+fi
+
+# Clean up remote temporary directory
+ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "rm -rf '${REMOTE_TEMP_DIR}'"
 
 # Import the database using wp-import-db
 echo "Importing database using wp-import-db..."
-bash /mnt/ddev_config/commands/web/wp-import-db "$ENVIRONMENT" "development" "$DUMP_FILENAME"
-
-if [ $? -ne 0 ]; then
+if ! bash /mnt/ddev_config/commands/web/wp-import-db "$ENVIRONMENT" "development" "$DUMP_FILENAME"; then
     print_error "Database import failed"
     exit 1
 fi
