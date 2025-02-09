@@ -36,7 +36,6 @@
 .deployment_script:
   script:
     # Build steps
-    # Conditional npm steps
     - |
       if [ -f "package.json" ]; then
         npm install
@@ -47,14 +46,13 @@
 
     # Create directories
     - ssh $DEPLOY_USER@$DEPLOY_SERVER "mkdir -p ${RELEASES_DIR} && mkdir -p ${SHARED_DIR} && mkdir -p ${RELEASES_DIR}/${TIMESTAMP}"
-    - ssh $DEPLOY_USER@$DEPLOY_SERVER "cd ${RELEASES_DIR} && ln -snf ./${TIMESTAMP} next"
     - ssh $DEPLOY_USER@$DEPLOY_SERVER "mkdir -p ${DEPLOY_PATH}/cache/transfer"
 
     # Rsync files
     - eval "rsync -q --compress --rsh=\"ssh\" --recursive --times --perms --links --delete --delete-excluded ${RSYNC_EXCLUDES} ./ $DEPLOY_USER@$DEPLOY_SERVER:${DEPLOY_PATH}/cache/transfer"
     - ssh $DEPLOY_USER@$DEPLOY_SERVER "cp -RPp ${DEPLOY_PATH}/cache/transfer/. ${DEPLOY_PATH}/releases/${TIMESTAMP}"
 
-    # Create Symlinks
+    # Create Symlinks for shared resources
     - |
       IFS=' ' read -r -a SYMLINKS_ARRAY <<< "$SYMLINKS"
       for SYMLINK in "${SYMLINKS_ARRAY[@]}"; do
@@ -64,23 +62,21 @@
         ssh $DEPLOY_USER@$DEPLOY_SERVER "ln -sf ${SRC} ${RELEASES_DIR}/${TIMESTAMP}${DEST}"
       done
 
-    # Switch symlinks and cleanup
+    # Switch to new release using directory instead of symlinks
     - |
       ssh $DEPLOY_USER@$DEPLOY_SERVER "
         set -x
         cd ${RELEASES_DIR} || exit 1
-        rm -rf ./previous
-        if [ -e ./current ]; then
-          mv ./current ./previous || exit 1
+        if [ -d ./current ]; then
+          rm -rf ./previous
+          mv ./current ./previous
         fi
-        ln -s ./${TIMESTAMP} ./current || exit 1
+        cp -R ./${TIMESTAMP} ./current
       "
 
-    # Cleanup old releases (KEEP_RELEASES defines how many recent releases to keep)
-    # Excludes symlinks (current, next, previous) and keeps the N most recent releases
-    # where N is defined by KEEP_RELEASES in the configuration
+    # Cleanup old releases
     - |
       ssh $DEPLOY_USER@$DEPLOY_SERVER "
         cd ${RELEASES_DIR} && \
-        ls -t | grep -v 'current\|next\|previous' | tail -n +$((KEEP_RELEASES + 1)) | xargs -r rm -rf
+        ls -t | grep -v 'current\|previous' | tail -n +$((KEEP_RELEASES + 1)) | xargs -r rm -rf
       "
