@@ -403,6 +403,49 @@ The script will:
 
 **Note:** Like wp-push-db, this script requires explicit confirmation due to its potential to modify remote content.
 
+#### Update Translations Script: wp-update-translations
+
+Updates all WordPress translations (core, plugins, and themes) in your local environment.
+
+```bash
+ddev wp-update-translations
+```
+
+Example:
+```bash
+ddev wp-update-translations
+```
+
+The script will:
+1. Update WordPress core translations
+2. Update all plugin translations
+3. Update all theme translations
+4. Handle cases where updates are not available
+
+#### Push Translations Script: wp-push-translations
+
+Updates local translations and pushes them to a remote environment.
+
+```bash
+ddev wp-push-translations <environment>
+```
+
+Example:
+```bash
+ddev wp-push-translations staging
+```
+
+The script will:
+1. Update all WordPress translations locally using wp-update-translations
+2. Push your local translations to the remote environment
+3. Delete translation files on remote that don't exist locally
+4. Only upload new or modified files
+5. Update remote files if local versions are newer
+
+**Note:** This script requires explicit confirmation by typing "yes, update and push to <environment>" due to its potentially destructive nature.
+
+Uses rsync with --delete flag to ensure remote translations exactly match local translations.
+
 #### Safety Features
 
 All scripts include several safety measures:
@@ -418,11 +461,15 @@ All scripts include several safety measures:
 
 #### Example Workflows
 
+#### Example Workflows
+
 1. **Initial Development Setup:**
    ```bash
    # Pull database and content from production
    ddev wp-pull-db production
    ddev wp-pull-ugc production
+   # Update translations locally
+   ddev wp-update-translations
    ```
 
 2. **Sync Staging Environment:**
@@ -430,6 +477,7 @@ All scripts include several safety measures:
    # Push local changes to staging
    ddev wp-push-db staging
    ddev wp-push-ugc staging
+   ddev wp-push-translations staging
    ```
 
 3. **Update Local Environment:**
@@ -437,6 +485,8 @@ All scripts include several safety measures:
    # Get latest content from staging
    ddev wp-pull-db staging
    ddev wp-pull-ugc staging
+   # Update translations locally
+   ddev wp-update-translations
    ```
 
 4. **Production Deployment:**
@@ -444,6 +494,23 @@ All scripts include several safety measures:
    # Carefully push changes to production
    ddev wp-push-db production
    ddev wp-push-ugc production
+   ddev wp-push-translations production
+   ```
+
+5. **Translation Updates Only:**
+   ```bash
+   # Update and push translations without content changes
+   ddev wp-update-translations
+   ddev wp-push-translations staging  # or production
+   ```
+
+6. **Complete Environment Sync:**
+   ```bash
+   # Full sync including database, content, and translations
+   ddev wp-pull-db staging
+   ddev wp-pull-ugc staging
+   ddev wp-update-translations
+   ddev wp-push-translations staging
    ```
 
 #### Environment Configuration

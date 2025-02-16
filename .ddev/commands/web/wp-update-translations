@@ -1,0 +1,51 @@
+#!/bin/bash
+
+## Description: Updates WordPress translations locally
+## Usage: wp-update-translations
+## Example: "ddev wp-update-translations"
+
+# Text formatting
+BOLD='\033[1m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Helper functions
+print_error() {
+    echo -e "${RED}${BOLD}Error: $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}${BOLD}Warning: $1${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}${BOLD}$1${NC}"
+}
+
+# Check if we're in a DDEV environment
+if [ -z "$DDEV_DOCROOT" ]; then
+    print_error "This script must be run within a DDEV environment"
+    exit 1
+fi
+
+echo -e "\n${BOLD}Updating WordPress Translations${NC}"
+
+# Update translations locally
+echo -e "\nUpdating WordPress core translations..."
+if ! wp language core update; then
+    print_warning "Core language update failed or nothing to update"
+fi
+
+echo -e "\nUpdating WordPress plugin translations..."
+if ! wp language plugin --all update; then
+    print_warning "Plugin language updates failed or nothing to update"
+fi
+
+echo -e "\nUpdating WordPress theme translations..."
+if ! wp language theme --all update; then
+    print_warning "Theme language updates failed or nothing to update"
+fi
+
+print_success "WordPress translations update completed successfully! 🎉"

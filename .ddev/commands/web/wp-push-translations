@@ -1,0 +1,134 @@
+#!/bin/bash
+
+## Description: Pushes WordPress translations to a remote environment
+## Usage: wp-push-translations <environment>
+## Example: "ddev wp-push-translations staging" or "ddev wp-push-translations production"
+
+# Check if environment parameter is provided
+if [ -z "$1" ]; then
+    echo "Error: Environment parameter is required (staging or production)"
+    echo "Usage: wp-push-translations <environment>"
+    exit 1
+fi
+
+ENVIRONMENT=$1
+
+# Configuration paths
+CONFIG_FILE=".gitlab/config/${ENVIRONMENT}.yml"
+LOCAL_LANGUAGES_DIR="/var/www/html/web/app/languages"
+
+# Text formatting
+BOLD='\033[1m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Helper functions
+print_error() {
+    echo -e "${RED}${BOLD}Error: $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}${BOLD}Warning: $1${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}${BOLD}$1${NC}"
+}
+
+# Check if we're in a DDEV environment
+if [ -z "$DDEV_DOCROOT" ]; then
+    print_error "This script must be run within a DDEV environment"
+    exit 1
+fi
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    print_error "Configuration file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Extract deployment configuration
+DEPLOY_USER=$(grep "DEPLOY_USER:" "$CONFIG_FILE" | awk -F'"' '{print $2}')
+DEPLOY_SERVER=$(grep "DEPLOY_SERVER:" "$CONFIG_FILE" | awk -F'"' '{print $2}')
+DEPLOY_PATH=$(grep "DEPLOY_PATH:" "$CONFIG_FILE" | awk -F'"' '{print $2}')
+
+if [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SERVER" ] || [ -z "$DEPLOY_PATH" ]; then
+    print_error "Could not extract all required deployment configuration"
+    exit 1
+fi
+
+REMOTE_LANGUAGES_DIR="${DEPLOY_PATH}/shared/web/app/languages"
+
+echo -e "\n${BOLD}WordPress Translations Push Operation - $ENVIRONMENT${NC}"
+echo "Local Path: $LOCAL_LANGUAGES_DIR"
+echo "Remote Server: $DEPLOY_USER@$DEPLOY_SERVER"
+echo "Remote Path: $REMOTE_LANGUAGES_DIR"
+
+# Warning and confirmation
+echo -e "\n${RED}${BOLD}!!! WARNING !!!"
+echo -e "This operation will:"
+echo -e "1. Update all WordPress translations locally"
+echo -e "2. Push your local translations to $ENVIRONMENT"
+echo -e "3. Delete translation files on remote that don't exist locally"
+echo -e "4. Overwrite remaining remote files"
+echo -e "5. This operation cannot be undone!\n"
+echo -e "Are you absolutely sure you want to continue?${NC}\n"
+
+# Explicit confirmation required
+echo -e "To confirm, please type exactly: \"yes, update and push to $ENVIRONMENT\""
+read -r confirmation
+
+if [ "$confirmation" != "yes, update and push to $ENVIRONMENT" ]; then
+    print_error "Confirmation did not match. Operation cancelled."
+    exit 1
+fi
+
+# Second chance to back out
+echo -e "\n${YELLOW}${BOLD}Last chance to cancel! Are you really sure? [y/N]${NC}"
+read -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Operation cancelled"
+    exit 1
+fi
+
+# First update translations locally
+echo -e "\nUpdating translations locally..."
+if ! bash /mnt/ddev_config/commands/web/wp-update-translations; then
+    print_error "Failed to update translations"
+    exit 1
+fi
+
+# Check if local languages directory exists
+if [ ! -d "$LOCAL_LANGUAGES_DIR" ]; then
+    print_error "Local languages directory does not exist: $LOCAL_LANGUAGES_DIR"
+    exit 1
+fi
+
+# Test SSH connection and remote directory existence
+echo -e "\nTesting SSH connection and checking remote directory..."
+if ! ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_SERVER}" "test -d ${REMOTE_LANGUAGES_DIR}"; then
+    print_error "Could not find languages directory at ${REMOTE_LANGUAGES_DIR}"
+    exit 1
+fi
+
+# Sync files using rsync
+echo "Pushing translation files to remote server..."
+rsync -avzh --progress \
+    --delete \
+    --no-perms \
+    --no-owner \
+    --no-group \
+    --size-only \
+    "${LOCAL_LANGUAGES_DIR}/" \
+    "${DEPLOY_USER}@${DEPLOY_SERVER}:${REMOTE_LANGUAGES_DIR}/"
+
+if [ $? -ne 0 ]; then
+    print_error "File sync failed"
+    exit 1
+fi
+
+print_success "WordPress translations push completed successfully! 🎉"
+echo "Files have been synced to: ${REMOTE_LANGUAGES_DIR}"
