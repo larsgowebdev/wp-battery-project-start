@@ -8,7 +8,8 @@
       - .npm/
       - .composer/
   before_script:
-    - sudo apt-get update && sudo apt-get install -y ssh rsync
+    - sudo rm -f /etc/apt/sources.list.d/yarn.list
+    - sudo apt-get update && sudo apt-get install -y openssh-client rsync
     - export TIMESTAMP=$(date +'%Y%m%d%H%M%S')
     # base64 decode the variable stored in gitlab repo variables
     - echo "$DEPLOY_KEY_BASE64" | base64 -d > ~/.ssh/id_rsa
