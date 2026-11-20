@@ -177,6 +177,17 @@ Configure deployment settings in:
 - `.gitlab/config/staging.yml`
 - `.gitlab/config/production.yml`
 
+Merge requests run a check pipeline (`.gitlab/workflows/checks.yml`):
+
+- `composer`: `composer validate` and `composer audit --locked --no-dev`. Vulnerable WordPress core and plugin
+  versions are flagged via [WP Sec Adv](https://github.com/typisttech/wpsecadv) (Wordfence data), configured as
+  a repository in `composer.json`. `config.audit.ignore` lists advisories without a fix, each with a reason.
+- `smoke-test`: builds the site like the deploy, installs WordPress into an empty MariaDB, activates all plugins and
+  the theme (the only folder under `packages/themes`, or `SMOKE_THEME`), and expects HTTP 200 without PHP fatals on
+  the home and login pages.
+
+Turn on *Settings → Merge requests → Pipelines must succeed* so nothing merges past a red check.
+
 #### Initial Deployment Setup
 
 Before the first deployment, you need to set up the remote directory structure. Use the provided setup script (make it executable first)
