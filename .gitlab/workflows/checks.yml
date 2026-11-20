@@ -1,0 +1,73 @@
+# .gitlab/workflows/checks.yml
+#
+# MR-Pipeline: prueft jede Aenderung, bevor sie nach development geht.
+# Renovate merged nur, wenn diese Jobs gruen sind (Projekteinstellung
+# "Pipelines must succeed"). Gleiche Datei in allen wp-battery-Sites.
+#
+#   composer    validate (Lockfile passt zu composer.json) + audit gegen
+#               WP Sec Adv und Packagist
+#   smoke-test  installiert die Site wie beim Deploy, setzt WordPress in
+#               einer leeren MariaDB auf, aktiviert alle Plugins und das
+#               Theme und ruft Startseite und Login auf: HTTP 200, kein
+#               PHP-Fatal.
+
+.composer_auth:
+  before_script:
+    - |
+      if [ -n "${COMPOSER_ACF_AUTH_USERNAME:-}" ] && [ -n "${COMPOSER_ACF_AUTH_PASSWORD:-}" ]; then
+        composer config --global http-basic.connect.advancedcustomfields.com "$COMPOSER_ACF_AUTH_USERNAME" "$COMPOSER_ACF_AUTH_PASSWORD"
+      fi
+    - |
+      if [ -n "${COMPOSER_BORLABS_COOKIE_AUTH:-}" ]; then
+        composer config --global http-basic.borlabs-cookie.composer.borlabs.io irrelevant "$COMPOSER_BORLABS_COOKIE_AUTH"
+      fi
+
+.mr_only:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+composer:
+  extends: [.composer_auth, .mr_only]
+  stage: Checks
+  # Offizielles Composer-Image: audit gegen WP Sec Adv braucht Composer >= 2.9,
+  # das thecodingmachine-Image steht auf 2.8.x (Stand 2025-06).
+  image: composer:2
+  script:
+    - composer validate --no-check-publish
+    # --no-dev: Deploys laufen mit --no-dev, Dev-Pakete sind nie live.
+    # Erst die Zusammenfassung; nur bei einem Fund die Details (WP Sec Adv
+    # haengt jedem Titel lange Lizenztexte an).
+    - composer audit --locked --no-dev --format=summary || { composer audit --locked --no-dev --format=plain; exit 1; }
+
+smoke-test:
+  extends: [.composer_auth, .mr_only]
+  stage: Checks
+  # Gleiches Image wie der Deploy, damit PHP und Node dieselben sind.
+  image: thecodingmachine/php:8.3-v4-cli-node20
+  services:
+    - name: mariadb:11.4
+      alias: db
+  variables:
+    MARIADB_DATABASE: wp
+    MARIADB_USER: wp
+    MARIADB_PASSWORD: wp
+    MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    # Theme-Ordner, der aktiviert wird. Leer: der einzige Ordner unter
+    # packages/themes. Bei mehreren Themes hier den Namen eintragen.
+    SMOKE_THEME: ""
+    WP_CLI_VERSION: 2.12.0
+    WP_CLI_SHA512: be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832
+    NPM_CONFIG_CACHE: $CI_PROJECT_DIR/.npm
+    COMPOSER_CACHE_DIR: $CI_PROJECT_DIR/.composer
+  cache:
+    key: smoke-test
+    paths:
+      - .npm/
+      - .composer/
+  script:
+    - .gitlab/workflows/smoke-test.sh
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths:
+      - smoke/

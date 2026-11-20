@@ -1,8 +1,12 @@
 # .gitlab-ci.yml
 
-# Prevents pipeline execution everywhere but staging/production
+# Pipelines run for merge requests (checks, see .gitlab/workflows/checks.yml)
+# and on staging/production (deployment). Nowhere else, so pushing a feature
+# or renovate/* branch does not start a duplicate branch pipeline.
 workflow:
   rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
     - if: $CI_COMMIT_BRANCH == "staging" || $CI_COMMIT_BRANCH == "production"
       when: always
     - when: never
@@ -10,6 +14,7 @@ workflow:
 # Load environment configs
 include:
   - local: '.gitlab/workflows/deployment.yml'
+  - local: '.gitlab/workflows/checks.yml'
   - local: '.gitlab/config/staging.yml'
   - local: '.gitlab/config/production.yml'
 
@@ -17,6 +22,7 @@ default:
   image: thecodingmachine/php:8.3-v4-cli-node20
 
 stages:
+  - Checks
   - Deployment
 
 # Staging Deployment

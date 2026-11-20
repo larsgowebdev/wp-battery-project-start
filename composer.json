@@ -31,6 +31,11 @@
     },
     {
       "type": "composer",
+      "url": "https://repo-wpsecadv.typist.tech",
+      "canonical": false
+    },
+    {
+      "type": "composer",
       "url": "https://connect.advancedcustomfields.com"
     },
     {
@@ -54,9 +59,8 @@
     "oscarotero/env": "^2.1",
     "roots/bedrock-autoloader": "^1.0",
     "roots/bedrock-disallow-indexing": "^2.0",
-    "roots/wordpress": "^6.6.1",
+    "roots/wordpress": "^7.1",
     "roots/wp-config": "1.0.0",
-    "roots/wp-password-bcrypt": "1.1.0",
     "roots/multisite-url-fixer": "^1.1",
 
     "wpengine/advanced-custom-fields-pro": "^6.3.0",
@@ -79,6 +83,12 @@
     "allow-plugins": {
       "composer/installers": true,
       "roots/wordpress-core-installer": true
+    },
+    "audit": {
+      "abandoned": "report",
+      "ignore": {
+        "WPSECADV/WF/9fda5e15-fdf9-4b67-93d3-2dbfa94aefe9/wordpress": "CVE-2017-14990: betrifft alle WordPress-Versionen, es gibt keinen Fix."
+      }
     }
   },
   "minimum-stability": "dev",
